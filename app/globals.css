@@ -133,8 +133,17 @@ em {
 
 /* Text, headlines, and active occluding cards always sit ABOVE the 3D plane so text is never overlapped */
 .text-shield,
-.layer-occlude,
-.earth-disc--occlude-plane {
+.layer-occlude {
+  position: relative;
+  z-index: var(--z-occlude);
+}
+
+.hero__copy,
+.section-head > div,
+.feelings__header,
+.waypoint-card__body,
+.story__text,
+.closing__card {
   position: relative;
   z-index: var(--z-occlude);
 }
@@ -149,7 +158,7 @@ em {
 
 /* Foreground-pass elements sit below the 3D plane when the plane swoops in front of them */
 .layer-under,
-.earth-disc--behind-plane {
+.earth-disc {
   position: relative;
   z-index: var(--z-under);
 }
@@ -641,14 +650,24 @@ em {
   text-wrap: pretty;
 }
 
-/* ---------- 2D Earth Globe Crossing Section ---------- */
-.globe-section {
+/* ---------- 2D Earth Globe Crossing Section (Sticky Pin Track) ---------- */
+.globe-track {
   position: relative;
-  padding: 130px 0 150px;
-  background:
-    radial-gradient(circle at 50% 58%, rgba(28, 61, 79, 0.1) 0%, transparent 55%),
-    var(--cream);
+  height: 280vh;
+}
+
+.globe-sticky {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 58%, rgba(28, 61, 79, 0.12) 0%, transparent 55%),
+    var(--cream);
 }
 
 .globe-section__inner {
@@ -656,6 +675,7 @@ em {
   grid-template-columns: 0.95fr 1.05fr;
   gap: clamp(40px, 6vw, 88px);
   align-items: center;
+  width: 100%;
 }
 
 .globe-section__copy {
@@ -1120,17 +1140,42 @@ em {
   .waypoint-card--right .waypoint-card__body {
     order: 2;
   }
-  .globe-section {
-    padding: 88px 0 104px;
+  .globe-track {
+    height: 240vh;
+  }
+  .globe-section__inner {
+    gap: 16px;
+    padding: 16px 0;
   }
   .globe-section__copy {
-    padding: 22px;
+    padding: 18px 20px;
+  }
+  .globe-section__copy h2 {
+    font-size: clamp(1.4rem, 4.4vw, 1.85rem);
+    line-height: 1.15;
+  }
+  .globe-section__copy p {
+    margin-top: 10px;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    max-width: 48ch;
+  }
+  .globe-coords {
+    margin-top: 14px;
+    padding-top: 12px;
+    gap: 12px;
+  }
+  .globe-coords span {
+    font-size: 0.62rem;
+  }
+  .globe-coords strong {
+    font-size: 0.76rem;
   }
   .globe-stage {
-    min-height: 320px;
+    min-height: 240px;
   }
   .earth-disc {
-    width: min(82vw, 330px);
+    width: min(58vw, 240px);
   }
   .story {
     padding: 96px 0;

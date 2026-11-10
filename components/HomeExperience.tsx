@@ -11,18 +11,11 @@ import {
   useTransform,
 } from "motion/react";
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
-import FlightStage, { type FlightPose } from "@/components/FlightStage";
+import FlightStage from "@/components/FlightStage";
 import { feelings, imagery, journal, ORIGINAL_SITE, services } from "@/lib/content";
 
 const easeOut = [0.22, 1, 0.36, 1] as const;
 const CONTACT = `${ORIGINAL_SITE}/contact`;
-
-const INITIAL_POSE: FlightPose = {
-  progress: 0,
-  stageIndex: 0,
-  behindGlobe: false,
-  globeOrbitProgress: 0,
-};
 
 function Arrow({ className = "icon-arrow" }: { className?: string }) {
   return (
@@ -239,7 +232,7 @@ function AerialRouteBackdrop() {
   );
 }
 
-function Hero({ behindElements }: { behindElements: boolean }) {
+function Hero() {
   const ref = useRef<HTMLElement>(null);
   const { scrollYProgress } = useScroll({
     target: ref,
@@ -314,7 +307,7 @@ function Hero({ behindElements }: { behindElements: boolean }) {
         </div>
 
         <motion.div
-          className={`hero__visual ${behindElements ? "layer-occlude" : "layer-under"}`}
+          className="hero__visual layer-occlude"
           initial={{ opacity: 0, scale: 0.94, y: 28 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ duration: 1.15, delay: 0.22, ease: easeOut }}
@@ -345,7 +338,7 @@ function Hero({ behindElements }: { behindElements: boolean }) {
   );
 }
 
-function Services({ behindElements }: { behindElements: boolean }) {
+function Services() {
   const alignments = ["left", "right", "left"] as const;
 
   return (
@@ -374,8 +367,8 @@ function Services({ behindElements }: { behindElements: boolean }) {
       <div className="waypoints-corridor">
         {services.map((service, i) => {
           const side = alignments[i];
-          const mediaOccludeClass =
-            behindElements || i % 2 === 0 ? "layer-occlude" : "layer-under";
+          // Permanent stable occlusion: cards 0 & 2 occlude the plane (plane dives behind), card 1 under (plane flies in front)
+          const mediaOccludeClass = i % 2 === 0 ? "layer-occlude" : "layer-under";
           return (
             <motion.article
               key={service.no}
@@ -426,225 +419,224 @@ function Services({ behindElements }: { behindElements: boolean }) {
 }
 
 /**
- * Illustrated 2D Earth Globe section where the 3D aircraft visibly crosses
- * in front of the globe, rounds the horizon limb, flies BEHIND the 2D Earth disc,
- * and reappears on the other side on its route to Thailand!
+ * Pinned 2D Earth Globe section where the page locks in place as the user scrolls,
+ * allowing the 3D aircraft to complete exactly two full revolutions around the Earth,
+ * diving behind the 2D Earth horizon and re-emerging before continuing the journey!
  */
-function GlobeCrossing({ pose }: { pose: FlightPose }) {
+function GlobeCrossing() {
   return (
-    <section className="globe-section" id="globe">
-      <div className="globe-section__inner shell">
-        <motion.div
-          className="globe-section__copy text-shield"
-          initial={{ opacity: 0, y: 24 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.25 }}
-          transition={{ duration: 0.85, ease: easeOut }}
-        >
-          <span className="section-kicker">ACROSS OCEANS · LOCAL IN THAILAND</span>
-          <h2>
-            From anywhere in the world, <em>to the heart of Thailand.</em>
-          </h2>
-          <p>
-            Whether you are flying in from California, New York, or London,
-            every route is choreographed down to the smallest transfer, boutique
-            hideaway, and neighborhood table in Chiang Mai, Bangkok, and the
-            southern islands.
-          </p>
-          <div className="globe-coords">
-            <div>
-              <span>PACIFIC &amp; AMERICAS</span>
-              <strong>34°03′N · 118°14′W</strong>
-            </div>
-            <span className="globe-coords__arrow">⟶</span>
-            <div>
-              <span>CHIANG MAI, THAILAND</span>
-              <strong>18°47′N · 98°59′E</strong>
-            </div>
-          </div>
-        </motion.div>
-
-        <div className="globe-stage">
-          {/* Back half of the orbital ring (always behind the Earth) */}
-          <svg
-            className="globe-orbit-back"
-            viewBox="0 0 600 600"
-            fill="none"
-            aria-hidden="true"
-          >
-            <ellipse
-              cx="300"
-              cy="300"
-              rx="275"
-              ry="88"
-              transform="rotate(-16 300 300)"
-              stroke="#c69963"
-              strokeWidth="1.5"
-              strokeDasharray="6 8"
-              strokeOpacity="0.55"
-            />
-          </svg>
-
-          {/* The 2D Illustrated Earth Disc:
-              When pose.behindGlobe is true, the Earth sits at z-index 20 (ABOVE the 3D plane canvas),
-              so the plane physically disappears BEHIND the 2D Earth and emerges on the other side!
-              When pose.behindGlobe is false, the Earth sits at z-index 6 (BELOW the 3D plane canvas),
-              so the plane visibly flies right across the front of the 2D Earth! */}
+    <section className="globe-track" id="globe">
+      <div className="globe-sticky">
+        <div className="globe-section__inner shell">
           <motion.div
-            id="earth-disc-target"
-            className={`earth-disc ${
-              pose.behindGlobe ? "earth-disc--occlude-plane" : "earth-disc--behind-plane"
-            }`}
-            initial={{ opacity: 0, scale: 0.9 }}
-            whileInView={{ opacity: 1, scale: 1 }}
+            className="globe-section__copy text-shield"
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.25 }}
-            transition={{ duration: 1, ease: easeOut }}
+            transition={{ duration: 0.85, ease: easeOut }}
           >
+            <span className="section-kicker">ACROSS OCEANS · LOCAL IN THAILAND</span>
+            <h2>
+              From anywhere in the world, <em>to the heart of Thailand.</em>
+            </h2>
+            <p>
+              Whether you are flying in from California, New York, or London,
+              every route is choreographed down to the smallest transfer, boutique
+              hideaway, and neighborhood table in Chiang Mai, Bangkok, and the
+              southern islands.
+            </p>
+            <div className="globe-coords">
+              <div>
+                <span>PACIFIC &amp; AMERICAS</span>
+                <strong>34°03′N · 118°14′W</strong>
+              </div>
+              <span className="globe-coords__arrow">⟶</span>
+              <div>
+                <span>CHIANG MAI, THAILAND</span>
+                <strong>18°47′N · 98°59′E</strong>
+              </div>
+            </div>
+          </motion.div>
+
+          <div className="globe-stage">
+            {/* Back half of the orbital ring (always behind the Earth) */}
             <svg
-              viewBox="0 0 520 520"
+              className="globe-orbit-back"
+              viewBox="0 0 600 600"
               fill="none"
-              className="earth-disc__svg"
-              role="img"
-              aria-label="Illustrated 2D globe showing the route across the ocean to Thailand"
+              aria-hidden="true"
             >
-              <defs>
-                <radialGradient id="oceanGrad" cx="35%" cy="30%" r="70%">
-                  <stop offset="0%" stopColor="#2b586e" />
-                  <stop offset="55%" stopColor="#1c3d4f" />
-                  <stop offset="100%" stopColor="#122836" />
-                </radialGradient>
-                <linearGradient id="landGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#f3ead8" />
-                  <stop offset="100%" stopColor="#dccab0" />
-                </linearGradient>
-                <clipPath id="earthClip">
-                  <circle cx="260" cy="260" r="228" />
-                </clipPath>
-              </defs>
-
-              {/* Outer Brass Compass Bezel */}
-              <circle
-                cx="260"
-                cy="260"
-                r="244"
+              <ellipse
+                cx="300"
+                cy="300"
+                rx="275"
+                ry="88"
+                transform="rotate(-16 300 300)"
                 stroke="#c69963"
-                strokeOpacity="0.45"
-                strokeWidth="1.2"
-                strokeDasharray="4 6"
+                strokeWidth="1.5"
+                strokeDasharray="6 8"
+                strokeOpacity="0.55"
               />
-              <circle
-                cx="260"
-                cy="260"
-                r="234"
-                stroke="#191513"
-                strokeOpacity="0.18"
-                strokeWidth="1"
-              />
+            </svg>
 
-              {/* 2D Earth Ocean Sphere */}
-              <g clipPath="url(#earthClip)">
-                <circle cx="260" cy="260" r="228" fill="url(#oceanGrad)" />
+            {/* The 2D Illustrated Earth Disc:
+                Permanently styled with layer-under.
+                Occlusion is handled with sub-pixel precision by Three.js depth mask,
+                eliminating all z-index flipping and repaint glitches! */}
+            <motion.div
+              id="earth-disc-target"
+              className="earth-disc layer-under"
+              initial={{ opacity: 0, scale: 0.9 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true, amount: 0.25 }}
+              transition={{ duration: 1, ease: easeOut }}
+            >
+              <svg
+                viewBox="0 0 520 520"
+                fill="none"
+                className="earth-disc__svg"
+                role="img"
+                aria-label="Illustrated 2D globe showing the route across the ocean to Thailand"
+              >
+                <defs>
+                  <radialGradient id="oceanGrad" cx="35%" cy="30%" r="70%">
+                    <stop offset="0%" stopColor="#2b586e" />
+                    <stop offset="55%" stopColor="#1c3d4f" />
+                    <stop offset="100%" stopColor="#122836" />
+                  </radialGradient>
+                  <linearGradient id="landGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#f3ead8" />
+                    <stop offset="100%" stopColor="#dccab0" />
+                  </linearGradient>
+                  <clipPath id="earthClip">
+                    <circle cx="260" cy="260" r="228" />
+                  </clipPath>
+                </defs>
 
-                {/* Latitude & Longitude Graticule Lines */}
-                <g stroke="#f5efe4" strokeOpacity="0.14" strokeWidth="1">
-                  <ellipse cx="260" cy="260" rx="228" ry="70" />
-                  <ellipse cx="260" cy="260" rx="228" ry="145" />
-                  <line x1="32" y1="260" x2="488" y2="260" />
-                  <ellipse cx="260" cy="260" rx="75" ry="228" />
-                  <ellipse cx="260" cy="260" rx="155" ry="228" />
-                  <line x1="260" y1="32" x2="260" y2="488" />
-                </g>
-
-                {/* Stylized 2D Continents: Eurasia & Southeast Asia (Thailand highlighted) */}
-                <path
-                  d="M 65 140 C 95 110, 155 95, 215 110 C 260 120, 295 145, 310 185 C 320 215, 300 248, 285 278 C 276 298, 278 325, 265 335 C 252 322, 248 292, 238 272 C 218 258, 196 272, 182 288 C 168 265, 155 238, 128 228 C 98 218, 72 182, 65 140 Z"
-                  fill="url(#landGrad)"
-                />
-                {/* Japan & Island Arc */}
-                <path
-                  d="M 332 176 C 344 188, 348 208, 338 224 C 328 216, 326 196, 332 176 Z"
-                  fill="url(#landGrad)"
-                />
-                {/* Indonesia & Philippines */}
-                <path
-                  d="M 272 348 C 292 344, 315 352, 332 364 C 314 372, 286 368, 272 348 Z"
-                  fill="url(#landGrad)"
-                />
-                {/* Australia Silhouette */}
-                <path
-                  d="M 305 398 C 338 386, 378 396, 392 426 C 384 452, 346 462, 315 446 C 298 432, 294 410, 305 398 Z"
-                  fill="url(#landGrad)"
-                />
-                {/* Americas Rim on Eastern Edge */}
-                <path
-                  d="M 425 95 C 458 118, 482 162, 476 215 C 462 242, 442 255, 452 288 C 464 322, 488 355, 472 405 C 448 382, 432 335, 422 292 C 412 248, 398 152, 425 95 Z"
-                  fill="url(#landGrad)"
-                />
-
-                {/* Inscribed Great-Circle Flight Arc across the 2D Globe */}
-                <path
-                  d="M 442 192 Q 355 135 268 278"
-                  stroke="#bb3028"
-                  strokeWidth="2.5"
-                  strokeDasharray="6 6"
-                  fill="none"
-                />
-
-                {/* Departure Pin (Americas Coast) */}
-                <circle cx="442" cy="192" r="5" fill="#f5efe4" stroke="#bb3028" strokeWidth="2.5" />
-
-                {/* Pulsing Destination Beacon: Chiang Mai, Thailand */}
-                <circle cx="268" cy="278" r="18" fill="#bb3028" fillOpacity="0.24" />
-                <circle cx="268" cy="278" r="9" fill="#bb3028" fillOpacity="0.45" />
-                <circle cx="268" cy="278" r="5" fill="#bb3028" stroke="#fbf7f0" strokeWidth="2" />
-
-                {/* Chiang Mai Callout Tag on the 2D Earth */}
-                <g transform="translate(118, 262)">
-                  <rect
-                     width="136"
-                    height="32"
-                    rx="16"
-                    fill="#191513"
-                    fillOpacity="0.86"
-                  />
-                  <text
-                    x="68"
-                    y="20"
-                    textAnchor="middle"
-                    fill="#fbf7f0"
-                    fontSize="9.5"
-                    fontWeight="700"
-                    letterSpacing="1.4"
-                  >
-                    CHIANG MAI · CNX
-                  </text>
-                </g>
-
-                {/* Inner atmospheric rim shading */}
+                {/* Outer Brass Compass Bezel */}
                 <circle
                   cx="260"
                   cy="260"
-                  r="228"
-                  stroke="#f5efe4"
-                  strokeOpacity="0.28"
-                  strokeWidth="6"
-                  fill="none"
+                  r="244"
+                  stroke="#c69963"
+                  strokeOpacity="0.45"
+                  strokeWidth="1.2"
+                  strokeDasharray="4 6"
                 />
-              </g>
-            </svg>
-          </motion.div>
+                <circle
+                  cx="260"
+                  cy="260"
+                  r="234"
+                  stroke="#191513"
+                  strokeOpacity="0.18"
+                  strokeWidth="1"
+                />
+
+                {/* 2D Earth Ocean Sphere */}
+                <g clipPath="url(#earthClip)">
+                  <circle cx="260" cy="260" r="228" fill="url(#oceanGrad)" />
+
+                  {/* Latitude & Longitude Graticule Lines */}
+                  <g stroke="#f5efe4" strokeOpacity="0.14" strokeWidth="1">
+                    <ellipse cx="260" cy="260" rx="228" ry="70" />
+                    <ellipse cx="260" cy="260" rx="228" ry="145" />
+                    <line x1="32" y1="260" x2="488" y2="260" />
+                    <ellipse cx="260" cy="260" rx="75" ry="228" />
+                    <ellipse cx="260" cy="260" rx="155" ry="228" />
+                    <line x1="260" y1="32" x2="260" y2="488" />
+                  </g>
+
+                  {/* Stylized 2D Continents: Eurasia & Southeast Asia (Thailand highlighted) */}
+                  <path
+                    d="M 65 140 C 95 110, 155 95, 215 110 C 260 120, 295 145, 310 185 C 320 215, 300 248, 285 278 C 276 298, 278 325, 265 335 C 252 322, 248 292, 238 272 C 218 258, 196 272, 182 288 C 168 265, 155 238, 128 228 C 98 218, 72 182, 65 140 Z"
+                    fill="url(#landGrad)"
+                  />
+                  {/* Japan & Island Arc */}
+                  <path
+                    d="M 332 176 C 344 188, 348 208, 338 224 C 328 216, 326 196, 332 176 Z"
+                    fill="url(#landGrad)"
+                  />
+                  {/* Indonesia & Philippines */}
+                  <path
+                    d="M 272 348 C 292 344, 315 352, 332 364 C 314 372, 286 368, 272 348 Z"
+                    fill="url(#landGrad)"
+                  />
+                  {/* Australia Silhouette */}
+                  <path
+                    d="M 305 398 C 338 386, 378 396, 392 426 C 384 452, 346 462, 315 446 C 298 432, 294 410, 305 398 Z"
+                    fill="url(#landGrad)"
+                  />
+                  {/* Americas Rim on Eastern Edge */}
+                  <path
+                    d="M 425 95 C 458 118, 482 162, 476 215 C 462 242, 442 255, 452 288 C 464 322, 488 355, 472 405 C 448 382, 432 335, 422 292 C 412 248, 398 152, 425 95 Z"
+                    fill="url(#landGrad)"
+                  />
+
+                  {/* Inscribed Great-Circle Flight Arc across the 2D Globe */}
+                  <path
+                    d="M 442 192 Q 355 135 268 278"
+                    stroke="#bb3028"
+                    strokeWidth="2.5"
+                    strokeDasharray="6 6"
+                    fill="none"
+                  />
+
+                  {/* Departure Pin (Americas Coast) */}
+                  <circle cx="442" cy="192" r="5" fill="#f5efe4" stroke="#bb3028" strokeWidth="2.5" />
+
+                  {/* Pulsing Destination Beacon: Chiang Mai, Thailand */}
+                  <circle cx="268" cy="278" r="18" fill="#bb3028" fillOpacity="0.24" />
+                  <circle cx="268" cy="278" r="9" fill="#bb3028" fillOpacity="0.45" />
+                  <circle cx="268" cy="278" r="5" fill="#bb3028" stroke="#fbf7f0" strokeWidth="2" />
+
+                  {/* Chiang Mai Callout Tag on the 2D Earth */}
+                  <g transform="translate(118, 262)">
+                    <rect
+                       width="136"
+                      height="32"
+                      rx="16"
+                      fill="#191513"
+                      fillOpacity="0.86"
+                    />
+                    <text
+                      x="68"
+                      y="20"
+                      textAnchor="middle"
+                      fill="#fbf7f0"
+                      fontSize="9.5"
+                      fontWeight="700"
+                      letterSpacing="1.4"
+                    >
+                      CHIANG MAI · CNX
+                    </text>
+                  </g>
+
+                  {/* Inner atmospheric rim shading */}
+                  <circle
+                    cx="260"
+                    cy="260"
+                    r="228"
+                    stroke="#f5efe4"
+                    strokeOpacity="0.28"
+                    strokeWidth="6"
+                    fill="none"
+                  />
+                </g>
+              </svg>
+            </motion.div>
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
-function Story({ behindElements }: { behindElements: boolean }) {
+function Story() {
   return (
     <section className="story" id="story">
       <div className="story__inner shell">
         <motion.div
-          className={`story__visual ${behindElements ? "layer-occlude" : "layer-under"}`}
+          className="story__visual layer-occlude"
           initial={{ opacity: 0, x: -32 }}
           whileInView={{ opacity: 1, x: 0 }}
           viewport={{ once: true, amount: 0.25 }}
@@ -861,7 +853,6 @@ export default function HomeExperience() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [flightEnabled, setFlightEnabled] = useState(true);
-  const [pose, setPose] = useState<FlightPose>(INITIAL_POSE);
   const { scrollY } = useScroll();
 
   useMotionValueEvent(scrollY, "change", (y) => {
@@ -893,7 +884,7 @@ export default function HomeExperience() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <FlightStage enabled={flightEnabled} onPoseChange={setPose} />
+      <FlightStage enabled={flightEnabled} />
       <Header
         scrolled={scrolled}
         menuOpen={menuOpen}
@@ -904,10 +895,10 @@ export default function HomeExperience() {
       <div className="page-canvas">
         <AerialRouteBackdrop />
         <main>
-          <Hero behindElements={pose.behindGlobe} />
-          <Services behindElements={pose.behindGlobe} />
-          <GlobeCrossing pose={pose} />
-          <Story behindElements={pose.behindGlobe} />
+          <Hero />
+          <Services />
+          <GlobeCrossing />
+          <Story />
           <Feelings />
           <Journal />
           <Closing />

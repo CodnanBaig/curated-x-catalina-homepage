@@ -712,6 +712,20 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
     const rightTrailLine = new THREE.Line(rightTrailGeo, secondTrailMat);
     scene.add(leftTrailLine, rightTrailLine);
 
+    // Invisible WebGL depth occluder disc positioned precisely over the 2D Earth DOM element.
+    // Writes depth at z = 0 without writing any color.
+    // When the aircraft is on the back arc (z < 0), fragments behind the disc fail depth test,
+    // naturally hiding the plane behind the 2D Earth with sub-pixel GPU precision and ZERO CSS flicker!
+    const occluderGeo = new THREE.CircleGeometry(1, 48);
+    const occluderMat = new THREE.MeshBasicMaterial({
+      colorWrite: false,
+      depthWrite: true,
+    });
+    const occluder = new THREE.Mesh(occluderGeo, occluderMat);
+    occluder.renderOrder = -1;
+    occluder.visible = false;
+    scene.add(occluder);
+
     const buildFlightCurve = (isMobile: boolean) => {
       const xMul = isMobile ? 0.42 : 1.0;
       return new THREE.CatmullRomCurve3(
@@ -721,11 +735,11 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
           new THREE.Vector3(-2.95 * xMul, -0.25, -1.6),
           new THREE.Vector3(2.85 * xMul, 0.2, 2.5),
           new THREE.Vector3(-2.85 * xMul, -0.15, -1.5),
-          new THREE.Vector3(1.25 * xMul, 0.05, 2.6),
-          new THREE.Vector3(2.45 * xMul, 0.15, -2.2),
-          new THREE.Vector3(-2.55 * xMul, 0.05, 2.5),
-          new THREE.Vector3(2.75 * xMul, -0.15, -1.5),
-          new THREE.Vector3(-2.55 * xMul, -0.22, 2.1),
+          new THREE.Vector3(-1.45 * xMul, 0.1, 1.2),
+          new THREE.Vector3(1.25 * xMul, 0.0, 1.8),
+          new THREE.Vector3(-2.65 * xMul, 0.08, -1.8),
+          new THREE.Vector3(2.75 * xMul, -0.15, 2.4),
+          new THREE.Vector3(-2.55 * xMul, -0.22, -1.6),
           new THREE.Vector3(2.05 * xMul, 0.28, 2.8),
           new THREE.Vector3(0.0, -0.42, 1.7),
         ],
@@ -814,54 +828,103 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
       const nextPos = flightCurve.getPointAt(Math.min(1, t + 0.018));
       const prevPos = flightCurve.getPointAt(Math.max(0, t - 0.018));
 
-      // Check if the 2D Earth Disc (#earth-disc-target) is in or near the viewport!
-      // When it is, blend the aircraft onto a true 3D orbital loop around the exact 2D Earth DOM element!
+      // Pinned 2D Earth Globe Orbit Tracking:
+      // When the user reaches the #globe section, the section is pinned/sticky.
+      // As the user scrolls through the pin distance, the aircraft completes
+      // EXACTLY TWO FULL REVOLUTIONS (4 * Math.PI) around the 2D Earth DOM element,
+      // seamlessly diving behind the Earth horizon (masked by WebGL depth occluder)
+      // and re-emerging on the front sweep!
       let globeBlend = 0;
-      let globeOrbitProgress = 0;
+      let orbitAngle = 0;
+      let inPin = false;
+
+      const globeTrack = document.getElementById("globe");
       const earthEl = document.getElementById("earth-disc-target");
-      if (earthEl) {
-        const rect = earthEl.getBoundingClientRect();
+
+      if (globeTrack && earthEl) {
+        const trackRect = globeTrack.getBoundingClientRect();
         const vh = window.innerHeight;
         const vw = window.innerWidth;
-        const centerY = rect.top + rect.height * 0.5;
-        const centerX = rect.left + rect.width * 0.5;
+        const pinDistance = globeTrack.offsetHeight - vh;
 
-        // Normalized progress as the Earth disc travels from bottom of screen (0) to top of screen (1)
-        const rawProgress = (vh * 0.88 - centerY) / (vh * 0.78);
-        if (rawProgress > -0.15 && rawProgress < 1.15) {
-          globeOrbitProgress = THREE.MathUtils.clamp(rawProgress, 0, 1);
-          globeBlend =
-            smoothstep(-0.12, 0.12, rawProgress) *
-            (1 - smoothstep(0.88, 1.12, rawProgress));
+        if (trackRect.top > 0 && trackRect.top < vh * 0.75) {
+          // Approaching the globe from Services
+          const approach = 1 - trackRect.top / (vh * 0.75);
+          globeBlend = smoothstep(0, 1, approach);
+          orbitAngle = 0;
+        } else if (trackRect.top <= 0 && trackRect.top >= -pinDistance) {
+          // PINNED! Pinned on that section while executing EXACTLY two revolutions!
+          globeBlend = 1.0;
+          inPin = true;
+          const globeProgress = pinDistance > 0 ? -trackRect.top / pinDistance : 0;
+          // Two complete revolutions: progress 0..1 maps to 0..4*PI (720 degrees)
+          orbitAngle = globeProgress * Math.PI * 4;
+        } else if (trackRect.top < -pinDistance && -trackRect.top - pinDistance < vh * 0.75) {
+          // Departing the pinned section towards Story
+          const depart = (-trackRect.top - pinDistance) / (vh * 0.75);
+          globeBlend = 1 - smoothstep(0, 1, depart);
+          orbitAngle = Math.PI * 4;
+        }
+
+        if (globeBlend > 0.001) {
+          const earthRect = earthEl.getBoundingClientRect();
+          const earthCenterX = earthRect.left + earthRect.width * 0.5;
+          const earthCenterY = earthRect.top + earthRect.height * 0.5;
 
           const worldH = 2 * cameraZ * Math.tan((cameraFov * Math.PI) / 360);
           const worldW = worldH * (vw / vh);
 
-          const earthWorldX = (centerX / vw - 0.5) * worldW;
-          const earthWorldY = (0.5 - centerY / vh) * worldH;
-          const earthRadiusWorld = ((rect.width * 0.5) / vh) * worldH;
+          const earthWorldX = (earthCenterX / vw - 0.5) * worldW;
+          const earthWorldY = (0.5 - earthCenterY / vh) * worldH;
+          const earthRadiusWorld = ((earthRect.width * 0.5) / vh) * worldH;
 
-          // Full 360-degree orbit around the 2D Earth:
-          // angle 0 .. PI: Front pass (z > 0, crosses in front of the 2D Earth from left to right)
-          // angle PI .. 2PI: Back pass (z < 0, ducks BEHIND the 2D Earth from right to left and emerges!)
-          const angle = globeOrbitProgress * Math.PI * 2;
-          const orbitRx = earthRadiusWorld * 1.28;
-          const orbitRy = earthRadiusWorld * 0.42;
+          // Position the invisible WebGL Depth Occluder disc exactly over the 2D Earth:
+          // Any plane pixels at z < 0 behind this disc are natively discarded by GPU depth testing!
+          occluder.visible = true;
+          occluder.position.set(earthWorldX, earthWorldY, 0);
+          occluder.scale.setScalar(earthRadiusWorld * 0.985);
 
-          const orbitX = earthWorldX - Math.cos(angle) * orbitRx;
-          const orbitY = earthWorldY + Math.sin(angle * 2) * orbitRy * 0.45;
-          const orbitZ = Math.sin(angle) * 2.6;
+          // 3D Orbital path around the 2D Earth:
+          const rx = earthRadiusWorld * (isMobile ? 1.24 : 1.35);
+          const ry = earthRadiusWorld * (isMobile ? 0.42 : 0.46);
+          const tiltAngle = -0.28; // -16 deg tilt to match decorative compass ring
 
-          pos.lerp(new THREE.Vector3(orbitX, orbitY, orbitZ), globeBlend);
+          const cosA = Math.cos(orbitAngle);
+          const sinA = Math.sin(orbitAngle);
 
-          const nextAngle = Math.min(Math.PI * 2, angle + 0.18);
-          const nextOrbit = new THREE.Vector3(
-            earthWorldX - Math.cos(nextAngle) * orbitRx,
-            earthWorldY + Math.sin(nextAngle * 2) * orbitRy * 0.45,
-            Math.sin(nextAngle) * 2.6
-          );
-          nextPos.lerp(nextOrbit, globeBlend);
+          // Local elliptical coordinates (orbit starts on left limb at angle = 0):
+          const lx = -cosA * rx;
+          const ly = sinA * ry;
+
+          const cosT = Math.cos(tiltAngle);
+          const sinT = Math.sin(tiltAngle);
+
+          const orbitX = earthWorldX + (lx * cosT - ly * sinT);
+          const orbitY = earthWorldY + (lx * sinT + ly * cosT);
+          // Z depth: sinA > 0 is front arc (in front of 2D Earth), sinA < 0 is back arc (behind 2D Earth)
+          const orbitZ = sinA * 2.8;
+
+          const orbitPos = new THREE.Vector3(orbitX, orbitY, orbitZ);
+
+          // Compute forward lookahead for smooth heading:
+          const dAngle = 0.08;
+          const nextAngle = orbitAngle + dAngle;
+          const nextCosA = Math.cos(nextAngle);
+          const nextSinA = Math.sin(nextAngle);
+          const nextLX = -nextCosA * rx;
+          const nextLY = nextSinA * ry;
+          const nextOrbitX = earthWorldX + (nextLX * cosT - nextLY * sinT);
+          const nextOrbitY = earthWorldY + (nextLX * sinT + nextLY * cosT);
+          const nextOrbitZ = nextSinA * 2.8;
+          const nextOrbitPos = new THREE.Vector3(nextOrbitX, nextOrbitY, nextOrbitZ);
+
+          pos.lerp(orbitPos, globeBlend);
+          nextPos.lerp(nextOrbitPos, globeBlend);
+        } else {
+          occluder.visible = false;
         }
+      } else {
+        occluder.visible = false;
       }
 
       const introOffsetX = (1 - introFactor) * -2.0;
@@ -877,21 +940,31 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
       );
 
       const dx = nextPos.x - pos.x;
+      const dy = nextPos.y - pos.y;
       const dz = nextPos.z - pos.z;
       const dxPrev = pos.x - prevPos.x;
       const turnAccel = (dx - dxPrev) * 10;
 
-      const yaw = THREE.MathUtils.clamp(dx * 1.5 + pointerX * 0.15, -1.1, 1.1);
-      const pitch = THREE.MathUtils.clamp(
+      const normalYaw = THREE.MathUtils.clamp(dx * 1.5 + pointerX * 0.15, -1.1, 1.1);
+      const normalPitch = THREE.MathUtils.clamp(
         0.56 - dz * 0.2 + scrollVelocity * 0.022 - pointerY * 0.1,
         0.3,
         0.86
       );
-      const roll = THREE.MathUtils.clamp(
+      const normalRoll = THREE.MathUtils.clamp(
         -dx * 0.95 - turnAccel * 0.5 - pointerX * 0.15,
         -0.72,
         0.72
       );
+
+      // Aerodynamic attitude while in orbit:
+      const orbitYaw = THREE.MathUtils.clamp(Math.atan2(dx, Math.max(0.1, Math.abs(dz))) * 0.9, -1.35, 1.35);
+      const orbitPitch = THREE.MathUtils.clamp(0.48 - dy * 0.4, 0.2, 0.75);
+      const orbitRoll = THREE.MathUtils.clamp(-dx * 0.8 + Math.cos(orbitAngle) * -0.35, -0.85, 0.85);
+
+      const yaw = THREE.MathUtils.lerp(normalYaw, orbitYaw, globeBlend);
+      const pitch = THREE.MathUtils.lerp(normalPitch, orbitPitch, globeBlend);
+      const roll = THREE.MathUtils.lerp(normalRoll, orbitRoll, globeBlend);
 
       targetEuler.set(pitch, yaw, roll, "YXZ");
       targetQuat.setFromEuler(targetEuler);
@@ -901,8 +974,8 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
       craftRig.scale.setScalar(targetScale);
 
       // 3-Stage Morph Weights
-      const m1 = smoothstep(0.24, 0.36, t);
-      const m2 = smoothstep(0.58, 0.7, t);
+      const m1 = smoothstep(0.22, 0.32, t);
+      const m2 = smoothstep(0.62, 0.74, t);
 
       const wPaper = 1 - m1;
       const wPrivate = m1 * (1 - m2);
@@ -917,8 +990,8 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
       passengerJet.scale.setScalar(Math.max(0.001, wPassenger * 0.68));
 
       const morphIntensity = Math.max(
-        Math.sin(smoothstep(0.23, 0.37, t) * Math.PI),
-        Math.sin(smoothstep(0.57, 0.71, t) * Math.PI)
+        Math.sin(smoothstep(0.21, 0.33, t) * Math.PI),
+        Math.sin(smoothstep(0.61, 0.75, t) * Math.PI)
       );
       ringMat1.opacity = morphIntensity * 0.5;
       ringMat2.opacity = morphIntensity * 0.36;
@@ -946,12 +1019,12 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
       renderer.render(scene, camera);
 
       const behindGlobe = pos.z < 0;
-      const stageIndex: 0 | 1 | 2 = t < 0.3 ? 0 : t < 0.64 ? 1 : 2;
+      const stageIndex: 0 | 1 | 2 = t < 0.28 ? 0 : t < 0.65 ? 1 : 2;
 
       const now = performance.now();
       if (
         poseCallbackRef.current &&
-        (behindGlobe !== lastBehindGlobe || now - lastPoseEmit > 80)
+        now - lastPoseEmit > 250
       ) {
         lastBehindGlobe = behindGlobe;
         lastPoseEmit = now;
@@ -959,7 +1032,7 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
           progress: t,
           stageIndex,
           behindGlobe,
-          globeOrbitProgress,
+          globeOrbitProgress: inPin ? orbitAngle / (Math.PI * 4) : 0,
         });
       }
     };
