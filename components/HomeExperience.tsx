@@ -11,21 +11,17 @@ import {
   useTransform,
 } from "motion/react";
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
-import FlightStage, { type FlightTelemetry } from "@/components/FlightStage";
+import FlightStage, { type FlightPose } from "@/components/FlightStage";
 import { feelings, imagery, journal, ORIGINAL_SITE, services } from "@/lib/content";
 
 const easeOut = [0.22, 1, 0.36, 1] as const;
 const CONTACT = `${ORIGINAL_SITE}/contact`;
 
-const INITIAL_TELEMETRY: FlightTelemetry = {
+const INITIAL_POSE: FlightPose = {
   progress: 0,
   stageIndex: 0,
-  stageLabel: "Origami Paper Glider",
-  stageCode: "STAGE 01 · PAPER GLIDER",
-  altitudeFt: 1400,
-  speedKts: 45,
-  coordinates: "34°03′N 118°14′W → 24°08′N 110°18′W",
-  phaseNote: "First spark: sketching your bespoke route",
+  behindGlobe: false,
+  globeOrbitProgress: 0,
 };
 
 function Arrow({ className = "icon-arrow" }: { className?: string }) {
@@ -36,40 +32,15 @@ function Arrow({ className = "icon-arrow" }: { className?: string }) {
   );
 }
 
-function PlaneStageIcon({ stage }: { stage: 0 | 1 | 2 }) {
-  if (stage === 0) {
-    // Origami Paper Glider icon
-    return (
-      <svg viewBox="0 0 24 24" fill="none" className="stage-icon" aria-hidden="true">
-        <path
-          d="M21 3 3 10.5l7.2 2.8L14.5 21 21 3ZM10.2 13.3 21 3"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    );
-  }
-  if (stage === 1) {
-    // Sleek Private Jet icon
-    return (
-      <svg viewBox="0 0 24 24" fill="none" className="stage-icon" aria-hidden="true">
-        <path
-          d="M12 2.5c.7 0 1.2.6 1.2 1.5v5.2l7.3 4.3v1.8l-7.3-2.3v4.6l2.6 1.9V21l-3.8-1-3.8 1v-1.5l2.6-1.9V13l-7.3 2.3v-1.8l7.3-4.3V4c0-.9.5-1.5 1.2-1.5Z"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinejoin="round"
-        />
-      </svg>
-    );
-  }
-  // Wide-body Passenger Jet icon
+function PlaneToggleIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" className="stage-icon" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" className="toggle-plane-icon" aria-hidden="true">
       <path
-        d="M12 2c.9 0 1.5.7 1.5 1.8v4.8L22 13v2l-8.5-2.4v4.8l3.2 2.1v1.5L12 19.8 7.3 21v-1.5l3.2-2.1v-4.8L2 15v-2l8.5-4.4V3.8C10.5 2.7 11.1 2 12 2Z"
-        fill="currentColor"
+        d="M21 3 3 10.5l7.2 2.8L14.5 21 21 3ZM10.2 13.3 21 3"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </svg>
   );
@@ -81,7 +52,7 @@ function PlaneStageIcon({ stage }: { stage: 0 | 1 | 2 }) {
 function TiltFrame({
   children,
   className = "",
-  intensity = 7,
+  intensity = 6,
 }: {
   children: ReactNode;
   className?: string;
@@ -126,22 +97,24 @@ function TiltFrame({
 }
 
 const navLinks = [
-  { label: "Waypoints", href: "#services" },
-  { label: "Catalina", href: "#story" },
-  { label: "Flight Levels", href: "#feelings" },
-  { label: "Dispatches", href: "#journal" },
+  { label: "Services", href: "#services" },
+  { label: "Destinations", href: "#globe" },
+  { label: "About", href: "#story" },
+  { label: "Journal", href: "#journal" },
 ];
 
 function Header({
   scrolled,
   menuOpen,
   setMenuOpen,
-  telemetry,
+  flightEnabled,
+  setFlightEnabled,
 }: {
   scrolled: boolean;
   menuOpen: boolean;
   setMenuOpen: (next: boolean) => void;
-  telemetry: FlightTelemetry;
+  flightEnabled: boolean;
+  setFlightEnabled: (next: boolean) => void;
 }) {
   return (
     <>
@@ -153,16 +126,6 @@ function Header({
           </span>
         </a>
 
-        <div className="flight-hud-pill" aria-live="polite">
-          <span className="flight-hud-pill__dot" />
-          <PlaneStageIcon stage={telemetry.stageIndex} />
-          <span className="flight-hud-pill__stage">{telemetry.stageLabel}</span>
-          <span className="flight-hud-pill__sep">·</span>
-          <span className="flight-hud-pill__alt">
-            {telemetry.altitudeFt.toLocaleString()} FT
-          </span>
-        </div>
-
         <nav aria-label="Main navigation" className="desktop-nav">
           {navLinks.map((link) => (
             <a key={link.href} href={link.href}>
@@ -171,26 +134,41 @@ function Header({
           ))}
         </nav>
 
-        <a
-          className="button button--small header-cta"
-          href={CONTACT}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Plan your trip <Arrow />
-        </a>
+        <div className="header-controls">
+          <button
+            type="button"
+            className={`flight-toggle ${flightEnabled ? "flight-toggle--on" : "flight-toggle--off"}`}
+            onClick={() => setFlightEnabled(!flightEnabled)}
+            aria-pressed={flightEnabled}
+            title={flightEnabled ? "Pause 3D flight animation" : "Enable 3D flight animation"}
+          >
+            <PlaneToggleIcon />
+            <span className="flight-toggle__text">
+              Flight {flightEnabled ? "On" : "Off"}
+            </span>
+          </button>
 
-        <button
-          type="button"
-          className={`menu-toggle ${menuOpen ? "menu-toggle--open" : ""}`}
-          onClick={() => setMenuOpen(!menuOpen)}
-          aria-label={menuOpen ? "Close menu" : "Open menu"}
-          aria-expanded={menuOpen}
-          aria-controls="site-menu"
-        >
-          <span />
-          <span />
-        </button>
+          <a
+            className="button button--small header-cta"
+            href={CONTACT}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Plan your trip <Arrow />
+          </a>
+
+          <button
+            type="button"
+            className={`menu-toggle ${menuOpen ? "menu-toggle--open" : ""}`}
+            onClick={() => setMenuOpen(!menuOpen)}
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen}
+            aria-controls="site-menu"
+          >
+            <span />
+            <span />
+          </button>
+        </div>
       </header>
 
       <AnimatePresence>
@@ -204,10 +182,6 @@ function Header({
             exit={{ opacity: 0, y: -16 }}
             transition={{ duration: 0.3, ease: easeOut }}
           >
-            <div className="menu-panel__telemetry">
-              <span>{telemetry.stageCode}</span>
-              <span>{telemetry.coordinates}</span>
-            </div>
             {navLinks.map((link, i) => (
               <motion.a
                 key={link.href}
@@ -236,73 +210,36 @@ function Header({
 }
 
 /**
- * Right-side interactive flight altitude & aircraft morph scrubber.
- */
-function FlightRail({ telemetry }: { telemetry: FlightTelemetry }) {
-  const stages = [
-    { label: "01 · Paper Glider", href: "#top", active: telemetry.stageIndex === 0 },
-    { label: "02 · Private Jet", href: "#services-concierge", active: telemetry.stageIndex === 1 },
-    { label: "03 · Passenger Jet", href: "#feelings", active: telemetry.stageIndex === 2 },
-  ];
-
-  return (
-    <aside className="flight-rail" aria-label="Flight stage progress">
-      <div className="flight-rail__track">
-        <div
-          className="flight-rail__fill"
-          style={{ transform: `scaleY(${Math.max(0.03, telemetry.progress)})` }}
-        />
-      </div>
-      <div className="flight-rail__stages">
-        {stages.map((item, idx) => (
-          <a
-            key={item.href}
-            href={item.href}
-            className={`flight-rail__node ${item.active ? "flight-rail__node--active" : ""}`}
-            title={item.label}
-          >
-            <span className="flight-rail__pip" />
-            <span className="flight-rail__label">{item.label}</span>
-            <PlaneStageIcon stage={idx as 0 | 1 | 2} />
-          </a>
-        ))}
-      </div>
-    </aside>
-  );
-}
-
-/**
- * Continuous background SVG route line that zig-zags behind all sections,
- * visually anchoring the 3D aircraft's path.
+ * Continuous background SVG route line that zig-zags behind all sections.
  */
 function AerialRouteBackdrop() {
   return (
     <svg
       className="aerial-route-svg"
-      viewBox="0 0 1440 5200"
+      viewBox="0 0 1440 5800"
       fill="none"
       preserveAspectRatio="none"
       aria-hidden="true"
     >
       <path
-        d="M 240 260 C 980 480, 1290 660, 1140 940 C 990 1220, 180 1320, 290 1680 C 410 2040, 1260 1980, 1180 2360 C 1100 2740, 210 2780, 310 3180 C 410 3580, 1220 3560, 1120 3980 C 1020 4400, 260 4420, 480 4780 C 620 5000, 720 5080, 720 5160"
+        d="M 280 260 C 980 480, 1280 660, 1120 940 C 960 1220, 180 1320, 300 1720 C 420 2120, 1260 2180, 720 2780 C 180 3380, 1240 3480, 1120 3980 C 1000 4480, 220 4560, 360 4980 C 500 5400, 720 5540, 720 5720"
         stroke="url(#routeGrad)"
         strokeWidth="2"
         strokeDasharray="10 12"
       />
       <defs>
-        <linearGradient id="routeGrad" x1="0" y1="0" x2="0" y2="5200" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#bb3028" stopOpacity="0.45" />
-          <stop offset="35%" stopColor="#c69963" stopOpacity="0.5" />
-          <stop offset="70%" stopColor="#bb3028" stopOpacity="0.45" />
-          <stop offset="100%" stopColor="#bb3028" stopOpacity="0.15" />
+        <linearGradient id="routeGrad" x1="0" y1="0" x2="0" y2="5800" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#bb3028" stopOpacity="0.4" />
+          <stop offset="45%" stopColor="#c69963" stopOpacity="0.48" />
+          <stop offset="80%" stopColor="#bb3028" stopOpacity="0.4" />
+          <stop offset="100%" stopColor="#bb3028" stopOpacity="0.14" />
         </linearGradient>
       </defs>
     </svg>
   );
 }
 
-function Hero({ telemetry }: { telemetry: FlightTelemetry }) {
+function Hero({ behindElements }: { behindElements: boolean }) {
   const ref = useRef<HTMLElement>(null);
   const { scrollYProgress } = useScroll({
     target: ref,
@@ -314,17 +251,15 @@ function Hero({ telemetry }: { telemetry: FlightTelemetry }) {
   return (
     <section className="hero shell" id="top" ref={ref}>
       <div className="hero__grid">
-        <div className="hero__copy">
-          <motion.div
-            className="departure-tag"
-            initial={{ opacity: 0, y: 16 }}
+        <div className="hero__copy text-shield">
+          <motion.span
+            className="section-kicker"
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, ease: easeOut }}
+            transition={{ duration: 0.65, ease: easeOut }}
           >
-            <span className="departure-tag__code">FLIGHT CXC-01</span>
-            <span className="departure-tag__divider" />
-            <span>PAPER GLIDER → PRIVATE JET → FLAGSHIP AIRLINER</span>
-          </motion.div>
+            THAILAND &amp; BEYOND · BESPOKE TRAVEL ATELIER
+          </motion.span>
 
           <h1 className="hero__title">
             <span className="hero__line">
@@ -373,46 +308,13 @@ function Hero({ telemetry }: { telemetry: FlightTelemetry }) {
               Plan your trip <Arrow />
             </a>
             <a className="text-link" href="#services">
-              Follow the flight path ↓
+              See services
             </a>
-          </motion.div>
-
-          <motion.div
-            className="hero__evolution"
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.85, delay: 0.64, ease: easeOut }}
-          >
-            <div className="hero__evolution-steps">
-              <div className={`evo-chip ${telemetry.stageIndex === 0 ? "evo-chip--active" : ""}`}>
-                <PlaneStageIcon stage={0} />
-                <div>
-                  <strong>01 · Paper Glider</strong>
-                  <span>Dream &amp; Sketch</span>
-                </div>
-              </div>
-              <span className="evo-arrow">→</span>
-              <div className={`evo-chip ${telemetry.stageIndex === 1 ? "evo-chip--active" : ""}`}>
-                <PlaneStageIcon stage={1} />
-                <div>
-                  <strong>02 · Private Jet</strong>
-                  <span>Bespoke Concierge</span>
-                </div>
-              </div>
-              <span className="evo-arrow">→</span>
-              <div className={`evo-chip ${telemetry.stageIndex === 2 ? "evo-chip--active" : ""}`}>
-                <PlaneStageIcon stage={2} />
-                <div>
-                  <strong>03 · Passenger Jet</strong>
-                  <span>Touchdown in Thailand</span>
-                </div>
-              </div>
-            </div>
           </motion.div>
         </div>
 
         <motion.div
-          className="hero__visual"
+          className={`hero__visual ${behindElements ? "layer-occlude" : "layer-under"}`}
           initial={{ opacity: 0, scale: 0.94, y: 28 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ duration: 1.15, delay: 0.22, ease: easeOut }}
@@ -427,12 +329,12 @@ function Hero({ telemetry }: { telemetry: FlightTelemetry }) {
               />
               <div className="hero__window-overlay">
                 <div className="window-badge">
-                  <span className="window-badge__label">DEPARTURE WINDOW</span>
+                  <span className="window-badge__label">COASTAL HORIZONS</span>
                   <strong>24°08′N · 110°18′W</strong>
                 </div>
                 <div className="window-badge window-badge--right">
-                  <span className="window-badge__label">DESTINATION</span>
-                  <strong>CHIANG MAI · CNX</strong>
+                  <span className="window-badge__label">HOME BASE</span>
+                  <strong>CHIANG MAI, THAILAND</strong>
                 </div>
               </div>
             </div>
@@ -443,25 +345,20 @@ function Hero({ telemetry }: { telemetry: FlightTelemetry }) {
   );
 }
 
-function Services() {
+function Services({ behindElements }: { behindElements: boolean }) {
   const alignments = ["left", "right", "left"] as const;
-  const waypointCoords = [
-    "WAYPOINT 01 · 24°08′N 110°18′W · LA PAZ COAST",
-    "WAYPOINT 02 · DOOR-TO-DOOR WHITE GLOVE",
-    "WAYPOINT 03 · 18°47′N 98°59′E · CHIANG MAI",
-  ];
 
   return (
     <section className="services shell" id="services">
       <motion.div
-        className="section-head"
+        className="section-head text-shield"
         initial={{ opacity: 0, y: 24 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, amount: 0.2 }}
         transition={{ duration: 0.8, ease: easeOut }}
       >
         <div>
-          <span className="section-kicker">AERIAL CORRIDOR · 01 TO 03</span>
+          <span className="section-kicker">TAILORED TO YOUR PACE</span>
           <h2>How I can help</h2>
         </div>
         <a
@@ -470,77 +367,57 @@ function Services() {
           target="_blank"
           rel="noopener noreferrer"
         >
-          Explore all services <Arrow />
+          All services <Arrow />
         </a>
       </motion.div>
 
       <div className="waypoints-corridor">
         {services.map((service, i) => {
           const side = alignments[i];
+          const mediaOccludeClass =
+            behindElements || i % 2 === 0 ? "layer-occlude" : "layer-under";
           return (
-            <div key={service.no} id={i === 1 ? "services-concierge" : undefined}>
-              {/* Inject Morph Gate Banner right before Service 02 */}
-              {i === 1 && (
-                <motion.div
-                  className="morph-gate"
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  whileInView={{ opacity: 1, scale: 1 }}
-                  viewport={{ once: true, amount: 0.5 }}
-                  transition={{ duration: 0.75, ease: easeOut }}
+            <motion.article
+              key={service.no}
+              className={`waypoint-card waypoint-card--${side}`}
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.18 }}
+              transition={{ duration: 0.9, ease: easeOut }}
+            >
+              <TiltFrame className={`waypoint-card__media ${mediaOccludeClass}`} intensity={5}>
+                <a
+                  href={`${ORIGINAL_SITE}/services`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="waypoint-card__img-link"
                 >
-                  <span className="morph-gate__pulse" />
-                  <PlaneStageIcon stage={1} />
-                  <div>
-                    <strong>AIRCRAFT EVOLUTION · STAGE 02</strong>
-                    <span>
-                      Your folded paper sketch transforms into a Bespoke Private Jet as concierge planning takes over.
-                    </span>
-                  </div>
-                </motion.div>
-              )}
+                  <img src={service.image} alt={service.alt} loading="lazy" />
+                </a>
+              </TiltFrame>
 
-              <motion.article
-                className={`waypoint-card waypoint-card--${side}`}
-                initial={{ opacity: 0, y: 40 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, amount: 0.18 }}
-                transition={{ duration: 0.9, ease: easeOut }}
-              >
-                <TiltFrame className="waypoint-card__media" intensity={5}>
+              <div className="waypoint-card__body text-shield">
+                <span className="waypoint-card__no">{service.no}</span>
+                <h3>
                   <a
                     href={`${ORIGINAL_SITE}/services`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="waypoint-card__img-link"
                   >
-                    <img src={service.image} alt={service.alt} loading="lazy" />
-                    <span className="waypoint-card__coord">{waypointCoords[i]}</span>
+                    {service.title} <Arrow />
                   </a>
-                </TiltFrame>
-
-                <div className="waypoint-card__body">
-                  <span className="waypoint-card__no">0{i + 1}</span>
-                  <h3>
-                    <a
-                      href={`${ORIGINAL_SITE}/services`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {service.title} <Arrow />
-                    </a>
-                  </h3>
-                  <p>{service.description}</p>
-                  <a
-                    className="text-link"
-                    href={`${ORIGINAL_SITE}/services`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    View service details
-                  </a>
-                </div>
-              </motion.article>
-            </div>
+                </h3>
+                <p>{service.description}</p>
+                <a
+                  className="text-link"
+                  href={`${ORIGINAL_SITE}/services`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Learn more
+                </a>
+              </div>
+            </motion.article>
           );
         })}
       </div>
@@ -548,12 +425,226 @@ function Services() {
   );
 }
 
-function Story() {
+/**
+ * Illustrated 2D Earth Globe section where the 3D aircraft visibly crosses
+ * in front of the globe, rounds the horizon limb, flies BEHIND the 2D Earth disc,
+ * and reappears on the other side on its route to Thailand!
+ */
+function GlobeCrossing({ pose }: { pose: FlightPose }) {
+  return (
+    <section className="globe-section" id="globe">
+      <div className="globe-section__inner shell">
+        <motion.div
+          className="globe-section__copy text-shield"
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.25 }}
+          transition={{ duration: 0.85, ease: easeOut }}
+        >
+          <span className="section-kicker">ACROSS OCEANS · LOCAL IN THAILAND</span>
+          <h2>
+            From anywhere in the world, <em>to the heart of Thailand.</em>
+          </h2>
+          <p>
+            Whether you are flying in from California, New York, or London,
+            every route is choreographed down to the smallest transfer, boutique
+            hideaway, and neighborhood table in Chiang Mai, Bangkok, and the
+            southern islands.
+          </p>
+          <div className="globe-coords">
+            <div>
+              <span>PACIFIC &amp; AMERICAS</span>
+              <strong>34°03′N · 118°14′W</strong>
+            </div>
+            <span className="globe-coords__arrow">⟶</span>
+            <div>
+              <span>CHIANG MAI, THAILAND</span>
+              <strong>18°47′N · 98°59′E</strong>
+            </div>
+          </div>
+        </motion.div>
+
+        <div className="globe-stage">
+          {/* Back half of the orbital ring (always behind the Earth) */}
+          <svg
+            className="globe-orbit-back"
+            viewBox="0 0 600 600"
+            fill="none"
+            aria-hidden="true"
+          >
+            <ellipse
+              cx="300"
+              cy="300"
+              rx="275"
+              ry="88"
+              transform="rotate(-16 300 300)"
+              stroke="#c69963"
+              strokeWidth="1.5"
+              strokeDasharray="6 8"
+              strokeOpacity="0.55"
+            />
+          </svg>
+
+          {/* The 2D Illustrated Earth Disc:
+              When pose.behindGlobe is true, the Earth sits at z-index 20 (ABOVE the 3D plane canvas),
+              so the plane physically disappears BEHIND the 2D Earth and emerges on the other side!
+              When pose.behindGlobe is false, the Earth sits at z-index 6 (BELOW the 3D plane canvas),
+              so the plane visibly flies right across the front of the 2D Earth! */}
+          <motion.div
+            id="earth-disc-target"
+            className={`earth-disc ${
+              pose.behindGlobe ? "earth-disc--occlude-plane" : "earth-disc--behind-plane"
+            }`}
+            initial={{ opacity: 0, scale: 0.9 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true, amount: 0.25 }}
+            transition={{ duration: 1, ease: easeOut }}
+          >
+            <svg
+              viewBox="0 0 520 520"
+              fill="none"
+              className="earth-disc__svg"
+              role="img"
+              aria-label="Illustrated 2D globe showing the route across the ocean to Thailand"
+            >
+              <defs>
+                <radialGradient id="oceanGrad" cx="35%" cy="30%" r="70%">
+                  <stop offset="0%" stopColor="#2b586e" />
+                  <stop offset="55%" stopColor="#1c3d4f" />
+                  <stop offset="100%" stopColor="#122836" />
+                </radialGradient>
+                <linearGradient id="landGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#f3ead8" />
+                  <stop offset="100%" stopColor="#dccab0" />
+                </linearGradient>
+                <clipPath id="earthClip">
+                  <circle cx="260" cy="260" r="228" />
+                </clipPath>
+              </defs>
+
+              {/* Outer Brass Compass Bezel */}
+              <circle
+                cx="260"
+                cy="260"
+                r="244"
+                stroke="#c69963"
+                strokeOpacity="0.45"
+                strokeWidth="1.2"
+                strokeDasharray="4 6"
+              />
+              <circle
+                cx="260"
+                cy="260"
+                r="234"
+                stroke="#191513"
+                strokeOpacity="0.18"
+                strokeWidth="1"
+              />
+
+              {/* 2D Earth Ocean Sphere */}
+              <g clipPath="url(#earthClip)">
+                <circle cx="260" cy="260" r="228" fill="url(#oceanGrad)" />
+
+                {/* Latitude & Longitude Graticule Lines */}
+                <g stroke="#f5efe4" strokeOpacity="0.14" strokeWidth="1">
+                  <ellipse cx="260" cy="260" rx="228" ry="70" />
+                  <ellipse cx="260" cy="260" rx="228" ry="145" />
+                  <line x1="32" y1="260" x2="488" y2="260" />
+                  <ellipse cx="260" cy="260" rx="75" ry="228" />
+                  <ellipse cx="260" cy="260" rx="155" ry="228" />
+                  <line x1="260" y1="32" x2="260" y2="488" />
+                </g>
+
+                {/* Stylized 2D Continents: Eurasia & Southeast Asia (Thailand highlighted) */}
+                <path
+                  d="M 65 140 C 95 110, 155 95, 215 110 C 260 120, 295 145, 310 185 C 320 215, 300 248, 285 278 C 276 298, 278 325, 265 335 C 252 322, 248 292, 238 272 C 218 258, 196 272, 182 288 C 168 265, 155 238, 128 228 C 98 218, 72 182, 65 140 Z"
+                  fill="url(#landGrad)"
+                />
+                {/* Japan & Island Arc */}
+                <path
+                  d="M 332 176 C 344 188, 348 208, 338 224 C 328 216, 326 196, 332 176 Z"
+                  fill="url(#landGrad)"
+                />
+                {/* Indonesia & Philippines */}
+                <path
+                  d="M 272 348 C 292 344, 315 352, 332 364 C 314 372, 286 368, 272 348 Z"
+                  fill="url(#landGrad)"
+                />
+                {/* Australia Silhouette */}
+                <path
+                  d="M 305 398 C 338 386, 378 396, 392 426 C 384 452, 346 462, 315 446 C 298 432, 294 410, 305 398 Z"
+                  fill="url(#landGrad)"
+                />
+                {/* Americas Rim on Eastern Edge */}
+                <path
+                  d="M 425 95 C 458 118, 482 162, 476 215 C 462 242, 442 255, 452 288 C 464 322, 488 355, 472 405 C 448 382, 432 335, 422 292 C 412 248, 398 152, 425 95 Z"
+                  fill="url(#landGrad)"
+                />
+
+                {/* Inscribed Great-Circle Flight Arc across the 2D Globe */}
+                <path
+                  d="M 442 192 Q 355 135 268 278"
+                  stroke="#bb3028"
+                  strokeWidth="2.5"
+                  strokeDasharray="6 6"
+                  fill="none"
+                />
+
+                {/* Departure Pin (Americas Coast) */}
+                <circle cx="442" cy="192" r="5" fill="#f5efe4" stroke="#bb3028" strokeWidth="2.5" />
+
+                {/* Pulsing Destination Beacon: Chiang Mai, Thailand */}
+                <circle cx="268" cy="278" r="18" fill="#bb3028" fillOpacity="0.24" />
+                <circle cx="268" cy="278" r="9" fill="#bb3028" fillOpacity="0.45" />
+                <circle cx="268" cy="278" r="5" fill="#bb3028" stroke="#fbf7f0" strokeWidth="2" />
+
+                {/* Chiang Mai Callout Tag on the 2D Earth */}
+                <g transform="translate(118, 262)">
+                  <rect
+                     width="136"
+                    height="32"
+                    rx="16"
+                    fill="#191513"
+                    fillOpacity="0.86"
+                  />
+                  <text
+                    x="68"
+                    y="20"
+                    textAnchor="middle"
+                    fill="#fbf7f0"
+                    fontSize="9.5"
+                    fontWeight="700"
+                    letterSpacing="1.4"
+                  >
+                    CHIANG MAI · CNX
+                  </text>
+                </g>
+
+                {/* Inner atmospheric rim shading */}
+                <circle
+                  cx="260"
+                  cy="260"
+                  r="228"
+                  stroke="#f5efe4"
+                  strokeOpacity="0.28"
+                  strokeWidth="6"
+                  fill="none"
+                />
+              </g>
+            </svg>
+          </motion.div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Story({ behindElements }: { behindElements: boolean }) {
   return (
     <section className="story" id="story">
       <div className="story__inner shell">
         <motion.div
-          className="story__visual"
+          className={`story__visual ${behindElements ? "layer-occlude" : "layer-under"}`}
           initial={{ opacity: 0, x: -32 }}
           whileInView={{ opacity: 1, x: 0 }}
           viewport={{ once: true, amount: 0.25 }}
@@ -573,13 +664,13 @@ function Story() {
         </motion.div>
 
         <motion.div
-          className="story__text"
+          className="story__text text-shield"
           initial={{ opacity: 0, x: 32 }}
           whileInView={{ opacity: 1, x: 0 }}
           viewport={{ once: true, amount: 0.25 }}
           transition={{ duration: 0.9, delay: 0.1, ease: easeOut }}
         >
-          <span className="section-kicker">THE NAVIGATOR IN YOUR CORNER</span>
+          <span className="section-kicker">SOMEONE LOCAL IN YOUR CORNER</span>
           <h2>Hi, I&rsquo;m Catalina.</h2>
           <p>
             Half Thai, now living in Chiang Mai, I spend my days uncovering
@@ -610,29 +701,10 @@ function Story() {
 }
 
 function Feelings() {
-  const flightLevels = ["FL 120", "FL 190", "FL 260", "FL 340", "FL 410"];
-
   return (
     <section className="feelings shell" id="feelings" aria-labelledby="feelings-title">
-      <motion.div
-        className="morph-gate morph-gate--widebody"
-        initial={{ opacity: 0, scale: 0.95 }}
-        whileInView={{ opacity: 1, scale: 1 }}
-        viewport={{ once: true, amount: 0.5 }}
-        transition={{ duration: 0.75, ease: easeOut }}
-      >
-        <span className="morph-gate__pulse" />
-        <PlaneStageIcon stage={2} />
-        <div>
-          <strong>AIRCRAFT EVOLUTION · STAGE 03 · FLAGSHIP WIDE-BODY JET</strong>
-          <span>
-            Entering transpacific cruise altitude — crossing into Thailand with total peace of mind.
-          </span>
-        </div>
-      </motion.div>
-
-      <div className="feelings__header">
-        <span className="section-kicker">CRUISING ALTITUDE · FIVE PROMISES</span>
+      <div className="feelings__header text-shield">
+        <span className="section-kicker">THE PHILOSOPHY</span>
         <h2 id="feelings-title">Travel should feel like&hellip;</h2>
       </div>
 
@@ -640,13 +712,15 @@ function Feelings() {
         {feelings.map((item, i) => (
           <motion.li
             key={item.more}
-            className={`feeling-step feeling-step--${i % 2 === 0 ? "left" : "right"}`}
+            className={`feeling-step feeling-step--${
+              i % 2 === 0 ? "left" : "right"
+            } text-shield`}
             initial={{ opacity: 0, y: 24 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ amount: 0.55, once: true }}
             transition={{ duration: 0.7, delay: i * 0.05, ease: easeOut }}
           >
-            <span className="feeling-step__fl">{flightLevels[i]}</span>
+            <span className="feeling-step__fl">0{i + 1}</span>
             <div className="feeling-step__text">
               <span className="feeling-step__less">{item.less}</span>{" "}
               <em className="feeling-step__more">{item.more}</em>
@@ -665,14 +739,14 @@ function Journal() {
   return (
     <section className="journal shell" id="journal">
       <motion.div
-        className="section-head"
+        className="section-head text-shield"
         initial={{ opacity: 0, y: 24 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, amount: 0.2 }}
         transition={{ duration: 0.8, ease: easeOut }}
       >
         <div>
-          <span className="section-kicker">FIELD DISPATCHES · THAILAND INSIDER NOTES</span>
+          <span className="section-kicker">FIELD NOTES &amp; GUIDES</span>
           <h2>From the journal</h2>
         </div>
         <a
@@ -681,7 +755,7 @@ function Journal() {
           target="_blank"
           rel="noopener noreferrer"
         >
-          All field notes <Arrow />
+          All posts <Arrow />
         </a>
       </motion.div>
 
@@ -689,7 +763,9 @@ function Journal() {
         {journal.map((article, i) => (
           <motion.article
             key={article.no}
-            className={`dispatch-card dispatch-card--${i % 2 === 0 ? "left" : "right"}`}
+            className={`dispatch-card dispatch-card--${
+              i % 2 === 0 ? "left" : "right"
+            } text-shield`}
             initial={{ opacity: 0, y: 28 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.25 }}
@@ -702,14 +778,14 @@ function Journal() {
               className="dispatch-card__link"
             >
               <div className="dispatch-card__top">
-                <span className="dispatch-card__code">DISPATCH {article.no}</span>
+                <span className="dispatch-card__code">{article.no}</span>
                 <span className="dispatch-card__category">{article.category}</span>
                 <time className="dispatch-card__date">{article.date}</time>
               </div>
               <h3>{article.title}</h3>
               <p>{article.description}</p>
               <span className="dispatch-card__cta">
-                Read dispatch <Arrow />
+                Read article <Arrow />
               </span>
             </a>
           </motion.article>
@@ -724,15 +800,13 @@ function Closing() {
     <section className="closing" id="contact">
       <div className="closing__runway shell">
         <motion.div
-          className="closing__card"
+          className="closing__card text-shield"
           initial={{ opacity: 0, y: 32 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.25 }}
           transition={{ duration: 0.9, ease: easeOut }}
         >
-          <span className="closing__kicker">
-            FINAL APPROACH · RUNWAY 36 · CHIANG MAI &amp; BEYOND
-          </span>
+          <span className="closing__kicker">THAILAND &amp; BEYOND</span>
           <h2>
             Your world is <em>waiting.</em>
           </h2>
@@ -761,7 +835,7 @@ function Closing() {
 
 function Footer() {
   return (
-    <footer className="footer shell">
+    <footer className="footer shell text-shield">
       <div className="footer__brand">
         <strong>Curated x Catalina</strong>
         <span>Thailand Travel Specialist &amp; Custom Itineraries</span>
@@ -786,13 +860,26 @@ function Footer() {
 export default function HomeExperience() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [telemetry, setTelemetry] = useState<FlightTelemetry>(INITIAL_TELEMETRY);
+  const [flightEnabled, setFlightEnabled] = useState(true);
+  const [pose, setPose] = useState<FlightPose>(INITIAL_POSE);
   const { scrollY } = useScroll();
 
   useMotionValueEvent(scrollY, "change", (y) => {
     const next = y > 24;
     setScrolled((prev) => (prev === next ? prev : next));
   });
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem("cxc-flight-enabled");
+    if (saved === "false") {
+      setFlightEnabled(false);
+    }
+  }, []);
+
+  const handleToggleFlight = (next: boolean) => {
+    setFlightEnabled(next);
+    window.localStorage.setItem("cxc-flight-enabled", String(next));
+  };
 
   useEffect(() => {
     document.body.style.overflow = menuOpen ? "hidden" : "";
@@ -806,20 +893,21 @@ export default function HomeExperience() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <FlightStage onTelemetry={setTelemetry} />
-      <FlightRail telemetry={telemetry} />
+      <FlightStage enabled={flightEnabled} onPoseChange={setPose} />
       <Header
         scrolled={scrolled}
         menuOpen={menuOpen}
         setMenuOpen={setMenuOpen}
-        telemetry={telemetry}
+        flightEnabled={flightEnabled}
+        setFlightEnabled={handleToggleFlight}
       />
       <div className="page-canvas">
         <AerialRouteBackdrop />
         <main>
-          <Hero telemetry={telemetry} />
-          <Services />
-          <Story />
+          <Hero behindElements={pose.behindGlobe} />
+          <Services behindElements={pose.behindGlobe} />
+          <GlobeCrossing pose={pose} />
+          <Story behindElements={pose.behindGlobe} />
           <Feelings />
           <Journal />
           <Closing />
