@@ -672,46 +672,6 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
 
     craftRig.add(paperPlane, privateJet, passengerJet);
 
-    const slipstreamGroup = new THREE.Group();
-    const ringMat1 = new THREE.MeshBasicMaterial({
-      color: 0xbb3028,
-      transparent: true,
-      opacity: 0,
-    });
-    const ringMat2 = new THREE.MeshBasicMaterial({
-      color: 0xc69963,
-      transparent: true,
-      opacity: 0,
-    });
-    const ring1 = new THREE.Mesh(new THREE.TorusGeometry(1.12, 0.014, 16, 64), ringMat1);
-    const ring2 = new THREE.Mesh(new THREE.TorusGeometry(1.48, 0.01, 16, 64), ringMat2);
-    ring1.rotation.x = 0.35;
-    ring2.rotation.y = 0.45;
-    slipstreamGroup.add(ring1, ring2);
-    craftRig.add(slipstreamGroup);
-
-    const trailLength = 52;
-    const leftTrailPoints = Array.from({ length: trailLength }, () => new THREE.Vector3(0, 0, 0));
-    const rightTrailPoints = Array.from({ length: trailLength }, () => new THREE.Vector3(0, 0, 0));
-
-    const leftTrailGeo = new THREE.BufferGeometry().setFromPoints(leftTrailPoints);
-    const rightTrailGeo = new THREE.BufferGeometry().setFromPoints(rightTrailPoints);
-
-    const trailMat = new THREE.LineBasicMaterial({
-      color: 0xbb3028,
-      transparent: true,
-      opacity: 0.34,
-    });
-    const secondTrailMat = new THREE.LineBasicMaterial({
-      color: 0xc69963,
-      transparent: true,
-      opacity: 0.28,
-    });
-
-    const leftTrailLine = new THREE.Line(leftTrailGeo, trailMat);
-    const rightTrailLine = new THREE.Line(rightTrailGeo, secondTrailMat);
-    scene.add(leftTrailLine, rightTrailLine);
-
     // Invisible WebGL depth occluder disc positioned precisely over the 2D Earth DOM element.
     // Writes depth at z = 0 without writing any color.
     // When the aircraft is on the back arc (z < 0), fragments behind the disc fail depth test,
@@ -727,21 +687,35 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
     scene.add(occluder);
 
     const buildFlightCurve = (isMobile: boolean) => {
-      const xMul = isMobile ? 0.42 : 1.0;
+      const xMul = isMobile ? 0.45 : 1.0;
       return new THREE.CatmullRomCurve3(
         [
-          new THREE.Vector3(isMobile ? 0.55 : 0.22, isMobile ? 0.88 : 0.58, 1.4),
-          new THREE.Vector3(2.95 * xMul, -0.1, 2.7),
-          new THREE.Vector3(-2.95 * xMul, -0.25, -1.6),
-          new THREE.Vector3(2.85 * xMul, 0.2, 2.5),
-          new THREE.Vector3(-2.85 * xMul, -0.15, -1.5),
-          new THREE.Vector3(-1.45 * xMul, 0.1, 1.2),
-          new THREE.Vector3(1.25 * xMul, 0.0, 1.8),
-          new THREE.Vector3(-2.65 * xMul, 0.08, -1.8),
-          new THREE.Vector3(2.75 * xMul, -0.15, 2.4),
-          new THREE.Vector3(-2.55 * xMul, -0.22, -1.6),
-          new THREE.Vector3(2.05 * xMul, 0.28, 2.8),
-          new THREE.Vector3(0.0, -0.42, 1.7),
+          // 0: Enters from the left of the Hero on loading
+          new THREE.Vector3(-3.4 * xMul, 0.95, 1.2),
+          // 1: Swoops across hero title
+          new THREE.Vector3(0.25 * xMul, 0.65, 1.6),
+          // 2: Across coastal window
+          new THREE.Vector3(2.55 * xMul, 0.15, 2.0),
+          // 3: Services Card 1 (dives behind)
+          new THREE.Vector3(-2.65 * xMul, -0.05, -1.4),
+          // 4: Services Card 2 (swoops in front)
+          new THREE.Vector3(2.45 * xMul, -0.08, 2.0),
+          // 5: Services Card 3 (dives behind)
+          new THREE.Vector3(-2.45 * xMul, 0.05, -1.2),
+          // 6: Approach to Globe (tangent to left limb of Earth)
+          new THREE.Vector3(-1.85 * xMul, 0.05, 0.8),
+          new THREE.Vector3(1.15 * xMul, 0.0, 1.4),
+          // 7: Story section exit (behind Catalina photo on left)
+          new THREE.Vector3(-2.45 * xMul, 0.06, -1.3),
+          // 8: Feelings section
+          new THREE.Vector3(2.35 * xMul, -0.08, 1.8),
+          // 9: Journal dispatch
+          new THREE.Vector3(-2.25 * xMul, 0.02, -1.1),
+          // 10: Closing section
+          new THREE.Vector3(1.15 * xMul, -0.15, 1.6),
+          // 11 & 12: Fly completely OFF the screen at the bottom footer
+          new THREE.Vector3(3.85 * xMul, 0.85, 0.5),
+          new THREE.Vector3(9.2 * xMul, 3.2, -3.5),
         ],
         false,
         "catmullrom",
@@ -752,9 +726,10 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
     let flightCurve = buildFlightCurve(window.innerWidth < 820);
 
     const sampleScale = (isMobile: boolean, zPos: number): number => {
-      const base = isMobile ? 0.42 : 0.62;
-      const zBoost = zPos * 0.068;
-      return THREE.MathUtils.clamp(base + zBoost, isMobile ? 0.28 : 0.38, isMobile ? 0.62 : 0.86);
+      // Elegant, refined scale without excessive ballooning
+      const base = isMobile ? 0.35 : 0.46;
+      const zFactor = 1.0 + THREE.MathUtils.clamp(zPos * 0.022, -0.07, 0.07);
+      return base * zFactor;
     };
 
     let targetScrollT = 0;
@@ -787,12 +762,6 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
     };
     window.addEventListener("resize", onResize);
 
-    const startPt = flightCurve.getPointAt(0);
-    for (let i = 0; i < trailLength; i++) {
-      leftTrailPoints[i].copy(startPt);
-      rightTrailPoints[i].copy(startPt);
-    }
-
     const smoothstep = (edge0: number, edge1: number, x: number) => {
       const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
       return t * t * (3 - 2 * t);
@@ -801,7 +770,12 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
     let rafId = 0;
     const clock = new THREE.Clock();
     const targetQuat = new THREE.Quaternion();
-    const targetEuler = new THREE.Euler(0, 0, 0, "YXZ");
+    const rotMatrix = new THREE.Matrix4();
+    const worldUp = new THREE.Vector3(0, 1, 0);
+    const rightVec = new THREE.Vector3();
+    const upVec = new THREE.Vector3();
+    const forwardHeading = new THREE.Vector3();
+    let smoothScrollDir = 1.0;
 
     const animate = () => {
       rafId = requestAnimationFrame(animate);
@@ -811,7 +785,7 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
       }
 
       const elapsed = clock.getElapsedTime();
-      const introFactor = reducedMotion ? 1 : smoothstep(0, 1.5, elapsed);
+      const introFactor = reducedMotion ? 1 : smoothstep(0, 1.4, elapsed);
 
       for (const rotor of spinningRotors) {
         rotor.rotation.z = elapsed * 18;
@@ -821,12 +795,20 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
       smoothScrollT += deltaT * (reducedMotion ? 0.25 : 0.085);
       scrollVelocity = deltaT * 100;
 
-      const t = Math.min(0.998, Math.max(0.002, smoothScrollT));
+      // Smoothly detect scroll direction with hysteresis:
+      if (deltaT > 0.0002) {
+        smoothScrollDir += (1.0 - smoothScrollDir) * 0.12;
+      } else if (deltaT < -0.0002) {
+        smoothScrollDir += (-1.0 - smoothScrollDir) * 0.12;
+      }
+
+      const t = Math.min(0.999, Math.max(0.001, smoothScrollT));
       const isMobile = window.innerWidth < 820;
 
+      const dtStep = 0.016;
       const pos = flightCurve.getPointAt(t);
-      const nextPos = flightCurve.getPointAt(Math.min(1, t + 0.018));
-      const prevPos = flightCurve.getPointAt(Math.max(0, t - 0.018));
+      const nextPos = flightCurve.getPointAt(Math.min(1, t + dtStep));
+      const prevPos = flightCurve.getPointAt(Math.max(0, t - dtStep));
 
       // Pinned 2D Earth Globe Orbit Tracking:
       // When the user reaches the #globe section, the section is pinned/sticky.
@@ -885,9 +867,10 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
           occluder.scale.setScalar(earthRadiusWorld * 0.985);
 
           // 3D Orbital path around the 2D Earth:
-          const rx = earthRadiusWorld * (isMobile ? 1.24 : 1.35);
-          const ry = earthRadiusWorld * (isMobile ? 0.42 : 0.46);
+          const rx = earthRadiusWorld * (isMobile ? 1.25 : 1.32);
+          const ry = earthRadiusWorld * (isMobile ? 0.44 : 0.46);
           const tiltAngle = -0.28; // -16 deg tilt to match decorative compass ring
+          const orbitZAmplitude = 2.4;
 
           const cosA = Math.cos(orbitAngle);
           const sinA = Math.sin(orbitAngle);
@@ -902,24 +885,35 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
           const orbitX = earthWorldX + (lx * cosT - ly * sinT);
           const orbitY = earthWorldY + (lx * sinT + ly * cosT);
           // Z depth: sinA > 0 is front arc (in front of 2D Earth), sinA < 0 is back arc (behind 2D Earth)
-          const orbitZ = sinA * 2.8;
+          const orbitZ = sinA * orbitZAmplitude;
 
           const orbitPos = new THREE.Vector3(orbitX, orbitY, orbitZ);
 
           // Compute forward lookahead for smooth heading:
-          const dAngle = 0.08;
-          const nextAngle = orbitAngle + dAngle;
-          const nextCosA = Math.cos(nextAngle);
-          const nextSinA = Math.sin(nextAngle);
+          const dAngle = 0.06;
+          const nextA = orbitAngle + dAngle;
+          const nextCosA = Math.cos(nextA);
+          const nextSinA = Math.sin(nextA);
           const nextLX = -nextCosA * rx;
           const nextLY = nextSinA * ry;
           const nextOrbitX = earthWorldX + (nextLX * cosT - nextLY * sinT);
           const nextOrbitY = earthWorldY + (nextLX * sinT + nextLY * cosT);
-          const nextOrbitZ = nextSinA * 2.8;
+          const nextOrbitZ = nextSinA * orbitZAmplitude;
           const nextOrbitPos = new THREE.Vector3(nextOrbitX, nextOrbitY, nextOrbitZ);
+
+          const prevA = orbitAngle - dAngle;
+          const prevCosA = Math.cos(prevA);
+          const prevSinA = Math.sin(prevA);
+          const prevLX = -prevCosA * rx;
+          const prevLY = prevSinA * ry;
+          const prevOrbitX = earthWorldX + (prevLX * cosT - prevLY * sinT);
+          const prevOrbitY = earthWorldY + (prevLX * sinT + prevLY * cosT);
+          const prevOrbitZ = prevSinA * orbitZAmplitude;
+          const prevOrbitPos = new THREE.Vector3(prevOrbitX, prevOrbitY, prevOrbitZ);
 
           pos.lerp(orbitPos, globeBlend);
           nextPos.lerp(nextOrbitPos, globeBlend);
+          prevPos.lerp(prevOrbitPos, globeBlend);
         } else {
           occluder.visible = false;
         }
@@ -927,55 +921,67 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
         occluder.visible = false;
       }
 
-      const introOffsetX = (1 - introFactor) * -2.0;
-      const introOffsetY = (1 - introFactor) * 0.8;
+      // Smooth entrance on page load from the left side of the hero
+      const introOffsetX = (1 - introFactor) * -5.5;
+      const introOffsetY = (1 - introFactor) * 0.4;
 
-      const floatY = reducedMotion ? 0 : Math.sin(elapsed * 2.1) * 0.06;
-      const floatX = reducedMotion ? 0 : Math.cos(elapsed * 1.5) * 0.04;
+      const floatY = reducedMotion ? 0 : Math.sin(elapsed * 2.1) * 0.04;
+      const floatX = reducedMotion ? 0 : Math.cos(elapsed * 1.5) * 0.03;
 
       craftRig.position.set(
-        pos.x + introOffsetX + floatX + pointerX * 0.15,
-        pos.y + introOffsetY + floatY + pointerY * 0.12,
+        pos.x + introOffsetX + floatX + pointerX * 0.12,
+        pos.y + introOffsetY + floatY + pointerY * 0.1,
         pos.z
       );
 
-      const dx = nextPos.x - pos.x;
-      const dy = nextPos.y - pos.y;
-      const dz = nextPos.z - pos.z;
-      const dxPrev = pos.x - prevPos.x;
-      const turnAccel = (dx - dxPrev) * 10;
+      // Determine heading based on scroll direction:
+      // If scrolling down, face forward along trajectory.
+      // If scrolling up, face backward along trajectory towards the direction of scroll.
+      const headingFwd = new THREE.Vector3().copy(nextPos).sub(pos);
+      const headingBack = new THREE.Vector3().copy(prevPos).sub(pos);
 
-      const normalYaw = THREE.MathUtils.clamp(dx * 1.5 + pointerX * 0.15, -1.1, 1.1);
-      const normalPitch = THREE.MathUtils.clamp(
-        0.56 - dz * 0.2 + scrollVelocity * 0.022 - pointerY * 0.1,
-        0.3,
-        0.86
-      );
-      const normalRoll = THREE.MathUtils.clamp(
-        -dx * 0.95 - turnAccel * 0.5 - pointerX * 0.15,
-        -0.72,
-        0.72
-      );
+      if (smoothScrollDir >= 0) {
+        forwardHeading.copy(headingFwd);
+      } else {
+        forwardHeading.copy(headingBack);
+      }
 
-      // Aerodynamic attitude while in orbit:
-      const orbitYaw = THREE.MathUtils.clamp(Math.atan2(dx, Math.max(0.1, Math.abs(dz))) * 0.9, -1.35, 1.35);
-      const orbitPitch = THREE.MathUtils.clamp(0.48 - dy * 0.4, 0.2, 0.75);
-      const orbitRoll = THREE.MathUtils.clamp(-dx * 0.8 + Math.cos(orbitAngle) * -0.35, -0.85, 0.85);
+      forwardHeading.x += pointerX * 0.12;
+      forwardHeading.y += pointerY * 0.08;
+      forwardHeading.normalize();
 
-      const yaw = THREE.MathUtils.lerp(normalYaw, orbitYaw, globeBlend);
-      const pitch = THREE.MathUtils.lerp(normalPitch, orbitPitch, globeBlend);
-      const roll = THREE.MathUtils.lerp(normalRoll, orbitRoll, globeBlend);
+      // Realistic aerodynamic banking roll into turns:
+      const curvature = (nextPos.x - pos.x) - (pos.x - prevPos.x);
+      let bankRoll = THREE.MathUtils.clamp(-curvature * 7.5 - pointerX * 0.15, -0.65, 0.65);
 
-      targetEuler.set(pitch, yaw, roll, "YXZ");
-      targetQuat.setFromEuler(targetEuler);
-      craftRig.quaternion.slerp(targetQuat, 0.14);
+      if (globeBlend > 0.1) {
+        const orbitBank = Math.cos(orbitAngle) * -0.36;
+        bankRoll = THREE.MathUtils.lerp(bankRoll, orbitBank, globeBlend);
+      }
 
-      const targetScale = sampleScale(isMobile, pos.z) * (0.55 + 0.45 * introFactor);
+      if (forwardHeading.lengthSq() > 0.001) {
+        rightVec.crossVectors(forwardHeading, worldUp).normalize();
+        if (rightVec.lengthSq() < 0.001) {
+          rightVec.set(1, 0, 0);
+        }
+        upVec.crossVectors(rightVec, forwardHeading).normalize();
+
+        if (Math.abs(bankRoll) > 0.001) {
+          rightVec.applyAxisAngle(forwardHeading, bankRoll);
+          upVec.applyAxisAngle(forwardHeading, bankRoll);
+        }
+
+        rotMatrix.makeBasis(rightVec, upVec, forwardHeading);
+        targetQuat.setFromRotationMatrix(rotMatrix);
+        craftRig.quaternion.slerp(targetQuat, reducedMotion ? 0.25 : 0.09);
+      }
+
+      const targetScale = sampleScale(isMobile, pos.z);
       craftRig.scale.setScalar(targetScale);
 
       // 3-Stage Morph Weights
-      const m1 = smoothstep(0.22, 0.32, t);
-      const m2 = smoothstep(0.62, 0.74, t);
+      const m1 = smoothstep(0.2, 0.3, t);
+      const m2 = smoothstep(0.64, 0.76, t);
 
       const wPaper = 1 - m1;
       const wPrivate = m1 * (1 - m2);
@@ -988,33 +994,6 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
       paperPlane.scale.setScalar(Math.max(0.001, wPaper));
       privateJet.scale.setScalar(Math.max(0.001, wPrivate * 0.84));
       passengerJet.scale.setScalar(Math.max(0.001, wPassenger * 0.68));
-
-      const morphIntensity = Math.max(
-        Math.sin(smoothstep(0.21, 0.33, t) * Math.PI),
-        Math.sin(smoothstep(0.61, 0.75, t) * Math.PI)
-      );
-      ringMat1.opacity = morphIntensity * 0.5;
-      ringMat2.opacity = morphIntensity * 0.36;
-      slipstreamGroup.rotation.z = elapsed * 2.4;
-      slipstreamGroup.scale.setScalar(0.75 + morphIntensity * 0.55);
-
-      const wingSpan = wPaper * 1.32 + wPrivate * 1.48 + wPassenger * 1.75;
-      const leftTipWorld = new THREE.Vector3(-wingSpan, 0.1, -0.85).applyMatrix4(
-        craftRig.matrixWorld
-      );
-      const rightTipWorld = new THREE.Vector3(wingSpan, 0.1, -0.85).applyMatrix4(
-        craftRig.matrixWorld
-      );
-
-      for (let i = trailLength - 1; i > 0; i--) {
-        leftTrailPoints[i].lerp(leftTrailPoints[i - 1], 0.54);
-        rightTrailPoints[i].lerp(rightTrailPoints[i - 1], 0.54);
-      }
-      leftTrailPoints[0].copy(leftTipWorld);
-      rightTrailPoints[0].copy(rightTipWorld);
-
-      leftTrailGeo.setFromPoints(leftTrailPoints);
-      rightTrailGeo.setFromPoints(rightTrailPoints);
 
       renderer.render(scene, camera);
 

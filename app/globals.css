@@ -672,10 +672,9 @@ em {
 
 .globe-section__inner {
   display: grid;
-  grid-template-columns: 0.95fr 1.05fr;
-  gap: clamp(40px, 6vw, 88px);
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(44px, 5.5vw, 88px);
   align-items: center;
-  width: 100%;
 }
 
 .globe-section__copy {
