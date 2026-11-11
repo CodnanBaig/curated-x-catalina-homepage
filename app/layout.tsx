@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Almarai, Libre_Baskerville } from "next/font/google";
 import "./globals.css";
 
-// Same families as the live curatedxcatalina.com site.
 const serif = Libre_Baskerville({
   subsets: ["latin"],
   weight: ["400", "700"],
@@ -19,16 +18,20 @@ const sans = Almarai({
 });
 
 export const metadata: Metadata = {
-  title: "Curated x Catalina: Journeys, curated",
+  title: "Travel Concierge & Custom Itineraries | Curated x Catalina",
   description:
-    "Custom itineraries and travel concierge for Thailand and beyond, planned by someone who lives there.",
+    "Thoughtful itineraries, trusted recommendations, and meticulous planning for travelers who value exceptional experiences over ordinary trips.",
   applicationName: "Curated x Catalina",
-  icons: { icon: "/favicon.svg" },
+  icons: {
+    icon: "/brand/favicon.png",
+    apple: "/brand/favicon.png",
+  },
   openGraph: {
-    title: "Curated x Catalina: Journeys, curated",
-    description: "Custom itineraries and travel concierge for Thailand and beyond.",
-    type: "website"
-  }
+    title: "Travel Concierge & Custom Itineraries | Curated x Catalina",
+    description:
+      "Explore personalized travel services, curated itineraries, and expert guidance for memorable journeys, especially in Thailand.",
+    type: "website",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
