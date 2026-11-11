@@ -307,7 +307,7 @@ function Hero() {
         </div>
 
         <motion.div
-          className="hero__visual layer-occlude"
+          className="hero__visual layer-under"
           initial={{ opacity: 0, scale: 0.94, y: 28 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ duration: 1.15, delay: 0.22, ease: easeOut }}
@@ -324,10 +324,6 @@ function Hero() {
                 <div className="window-badge">
                   <span className="window-badge__label">COASTAL HORIZONS</span>
                   <strong>24°08′N · 110°18′W</strong>
-                </div>
-                <div className="window-badge window-badge--right">
-                  <span className="window-badge__label">HOME BASE</span>
-                  <strong>CHIANG MAI, THAILAND</strong>
                 </div>
               </div>
             </div>

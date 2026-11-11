@@ -686,66 +686,162 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
     occluder.visible = false;
     scene.add(occluder);
 
-    const buildFlightCurve = (isMobile: boolean) => {
+    // Layout and dimensional tracking
+    let earthWorldX = 0;
+    let earthWorldY = 0;
+    let earthRadiusWorld = 2.0;
+    let rOrb = 2.2;
+    let pinStart = 0;
+    let pinDistance = 1;
+    let pinEnd = 1;
+    let maxScroll = 1;
+    let worldW = 14;
+    let worldH = 7.5;
+
+    // Geometric tilt of the orbital flight path matching the compass ellipse
+    const tiltPitch = 0.326; // ~18.7 deg
+    const tiltRoll = -0.27925; // -16 deg
+    const sinPitch = Math.sin(tiltPitch);
+    const cosPitch = Math.cos(tiltPitch);
+    const cosRoll = Math.cos(tiltRoll);
+    const sinRoll = Math.sin(tiltRoll);
+
+    function getOrbitPoint(angle: number) {
+      const cosA = Math.cos(angle);
+      const sinA = Math.sin(angle);
+      const lx = -rOrb * cosA;
+      const ly = rOrb * sinA * sinPitch;
+      const lz = rOrb * sinA * cosPitch;
+
+      const x = earthWorldX + (lx * cosRoll - ly * sinRoll);
+      const y = earthWorldY + (lx * sinRoll + ly * cosRoll);
+      const z = lz;
+
+      // Exact tangent derivative d(pos)/d(angle)
+      const dlx = rOrb * sinA;
+      const dly = rOrb * cosA * sinPitch;
+      const dlz = rOrb * cosA * cosPitch;
+
+      const tx = dlx * cosRoll - dly * sinRoll;
+      const ty = dlx * sinRoll + dly * cosRoll;
+      const tz = dlz;
+
+      const tangent = new THREE.Vector3(tx, ty, tz).normalize();
+      const normal = new THREE.Vector3(x - earthWorldX, y - earthWorldY, z).normalize();
+
+      return {
+        pos: new THREE.Vector3(x, y, z),
+        tangent,
+        normal,
+      };
+    }
+
+    let preGlobeCurve: THREE.CatmullRomCurve3;
+    let postGlobeCurve: THREE.CatmullRomCurve3;
+
+    const buildCurves = () => {
+      const isMobile = window.innerWidth < 820;
       const xMul = isMobile ? 0.45 : 1.0;
-      return new THREE.CatmullRomCurve3(
-        [
-          // 0: Enters from the left of the Hero on loading
-          new THREE.Vector3(-3.4 * xMul, 0.95, 1.2),
-          // 1: Swoops across hero title
-          new THREE.Vector3(0.25 * xMul, 0.65, 1.6),
-          // 2: Across coastal window
-          new THREE.Vector3(2.55 * xMul, 0.15, 2.0),
-          // 3: Services Card 1 (dives behind)
-          new THREE.Vector3(-2.65 * xMul, -0.05, -1.4),
-          // 4: Services Card 2 (swoops in front)
-          new THREE.Vector3(2.45 * xMul, -0.08, 2.0),
-          // 5: Services Card 3 (dives behind)
-          new THREE.Vector3(-2.45 * xMul, 0.05, -1.2),
-          // 6: Approach to Globe (tangent to left limb of Earth)
-          new THREE.Vector3(-1.85 * xMul, 0.05, 0.8),
-          new THREE.Vector3(1.15 * xMul, 0.0, 1.4),
-          // 7: Story section exit (behind Catalina photo on left)
-          new THREE.Vector3(-2.45 * xMul, 0.06, -1.3),
-          // 8: Feelings section
-          new THREE.Vector3(2.35 * xMul, -0.08, 1.8),
-          // 9: Journal dispatch
-          new THREE.Vector3(-2.25 * xMul, 0.02, -1.1),
-          // 10: Closing section
-          new THREE.Vector3(1.15 * xMul, -0.15, 1.6),
-          // 11 & 12: Fly completely OFF the screen at the bottom footer
-          new THREE.Vector3(3.85 * xMul, 0.85, 0.5),
-          new THREE.Vector3(9.2 * xMul, 3.2, -3.5),
-        ],
-        false,
-        "catmullrom",
-        0.5
-      );
+
+      // Entry point on left limb of globe at orbit angle = 0
+      const entry = getOrbitPoint(0);
+      const approachPt = entry.pos.clone().sub(entry.tangent.clone().multiplyScalar(1.2 * xMul));
+
+      const prePoints = [
+        new THREE.Vector3(0.08 * worldW, 0.45, 1.8),
+        new THREE.Vector3(0.22 * worldW, 0.20, 1.8),
+        new THREE.Vector3(0.26 * worldW, -0.05, 1.6),
+        new THREE.Vector3(-0.20 * worldW, -0.05, 0.8),
+        new THREE.Vector3(0.20 * worldW, -0.10, 1.8),
+        new THREE.Vector3(-0.18 * worldW, 0.05, 0.8),
+        approachPt,
+        entry.pos.clone(),
+      ];
+      preGlobeCurve = new THREE.CatmullRomCurve3(prePoints, false, "catmullrom", 0.5);
+
+      // Exit point at 4*PI (which equals angle 0 at left limb)
+      const exit = getOrbitPoint(Math.PI * 4);
+      const leadOutPt = exit.pos.clone().add(new THREE.Vector3(-0.9 * xMul, -0.5, 0.4));
+
+      const postPoints = [
+        exit.pos.clone(),
+        leadOutPt,
+        new THREE.Vector3(-0.22 * worldW, -0.05, 1.4),
+        new THREE.Vector3(0.20 * worldW, -0.08, 1.8),
+        new THREE.Vector3(-0.18 * worldW, 0.02, 1.2),
+        new THREE.Vector3(0.12 * worldW, -0.12, 1.6),
+        new THREE.Vector3(0.32 * worldW, 0.95, 1.8),
+        new THREE.Vector3(0.65 * worldW, 3.2, 0.5),
+      ];
+      postGlobeCurve = new THREE.CatmullRomCurve3(postPoints, false, "catmullrom", 0.5);
     };
 
-    let flightCurve = buildFlightCurve(window.innerWidth < 820);
+    const measureLayout = () => {
+      const vh = window.innerHeight;
+      const vw = window.innerWidth;
+      const scrollHeight = document.documentElement.scrollHeight;
+      maxScroll = Math.max(1, scrollHeight - vh);
+
+      worldH = 2 * cameraZ * Math.tan((cameraFov * Math.PI) / 360);
+      worldW = worldH * (vw / vh);
+
+      const globeTrack = document.getElementById("globe");
+      const earthEl = document.getElementById("earth-disc-target");
+      const stickyEl = globeTrack?.querySelector(".globe-sticky") as HTMLElement | null;
+
+      if (globeTrack && earthEl) {
+        let curr: HTMLElement | null = globeTrack;
+        let offsetTop = 0;
+        while (curr) {
+          offsetTop += curr.offsetTop;
+          curr = curr.offsetParent as HTMLElement | null;
+        }
+        pinStart = offsetTop;
+        pinDistance = Math.max(1, globeTrack.offsetHeight - vh);
+        pinEnd = pinStart + pinDistance;
+
+        const earthRect = earthEl.getBoundingClientRect();
+        const stickyRect = stickyEl ? stickyEl.getBoundingClientRect() : null;
+        const earthCenterX = stickyRect
+          ? (earthRect.left + earthRect.width * 0.5) - stickyRect.left
+          : vw * (vw < 820 ? 0.5 : 0.74);
+        const earthCenterY = vh * 0.5;
+
+        earthWorldX = (earthCenterX / vw - 0.5) * worldW;
+        earthWorldY = (0.5 - earthCenterY / vh) * worldH;
+        earthRadiusWorld = ((earthRect.width * 0.5) / vh) * worldH;
+        rOrb = earthRadiusWorld * 1.10;
+      } else {
+        pinStart = maxScroll * 0.35;
+        pinDistance = vh * 1.8;
+        pinEnd = pinStart + pinDistance;
+        earthWorldX = worldW * 0.24;
+        earthWorldY = 0;
+        earthRadiusWorld = worldH * 0.28;
+        rOrb = earthRadiusWorld * 1.10;
+      }
+
+      buildCurves();
+    };
+
+    measureLayout();
 
     const sampleScale = (isMobile: boolean, zPos: number): number => {
-      // Elegant, refined scale without excessive ballooning
       const base = isMobile ? 0.35 : 0.46;
       const zFactor = 1.0 + THREE.MathUtils.clamp(zPos * 0.022, -0.07, 0.07);
       return base * zFactor;
     };
 
-    let targetScrollT = 0;
-    let smoothScrollT = 0;
-    let scrollVelocity = 0;
+    let targetScrollY = window.scrollY;
+    let smoothScrollY = window.scrollY;
     let pointerX = 0;
     let pointerY = 0;
     let lastPoseEmit = 0;
-    let lastBehindGlobe = false;
 
     const updateScrollTarget = () => {
-      const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-      targetScrollT = Math.min(1, Math.max(0, window.scrollY / maxScroll));
+      targetScrollY = window.scrollY;
     };
 
-    updateScrollTarget();
     window.addEventListener("scroll", updateScrollTarget, { passive: true });
 
     const onPointerMove = (e: PointerEvent) => {
@@ -758,9 +854,15 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
-      flightCurve = buildFlightCurve(window.innerWidth < 820);
+      measureLayout();
     };
     window.addEventListener("resize", onResize);
+    window.addEventListener("load", measureLayout);
+
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => {
+      measureLayout();
+    }) : null;
+    ro?.observe(document.body);
 
     const smoothstep = (edge0: number, edge1: number, x: number) => {
       const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
@@ -771,213 +873,135 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
     const clock = new THREE.Clock();
     const targetQuat = new THREE.Quaternion();
     const rotMatrix = new THREE.Matrix4();
-    const worldUp = new THREE.Vector3(0, 1, 0);
-    const rightVec = new THREE.Vector3();
-    const upVec = new THREE.Vector3();
-    const forwardHeading = new THREE.Vector3();
-    let smoothScrollDir = 1.0;
+    let planeFactor = enabled ? 1.0 : 0.0;
 
     const animate = () => {
       rafId = requestAnimationFrame(animate);
 
-      if (!enabledRef.current) {
-        return;
-      }
+      const currentEnabled = enabledRef.current;
+      const targetPlaneFactor = currentEnabled ? 1.0 : 0.0;
+      planeFactor += (targetPlaneFactor - planeFactor) * (reducedMotion ? 0.35 : 0.12);
+      craftRig.visible = planeFactor > 0.005;
 
       const elapsed = clock.getElapsedTime();
-      const introFactor = reducedMotion ? 1 : smoothstep(0, 1.4, elapsed);
+      const introFactor = reducedMotion ? 1 : smoothstep(0, 1.2, elapsed);
 
       for (const rotor of spinningRotors) {
         rotor.rotation.z = elapsed * 18;
       }
 
-      const deltaT = targetScrollT - smoothScrollT;
-      smoothScrollT += deltaT * (reducedMotion ? 0.25 : 0.085);
-      scrollVelocity = deltaT * 100;
+      // Smooth, damped scroll interpolation for liquid 60/120fps motion
+      const deltaY = targetScrollY - smoothScrollY;
+      smoothScrollY += deltaY * (reducedMotion ? 0.35 : 0.08);
 
-      // Smoothly detect scroll direction with hysteresis:
-      if (deltaT > 0.0002) {
-        smoothScrollDir += (1.0 - smoothScrollDir) * 0.12;
-      } else if (deltaT < -0.0002) {
-        smoothScrollDir += (-1.0 - smoothScrollDir) * 0.12;
-      }
-
-      const t = Math.min(0.999, Math.max(0.001, smoothScrollT));
       const isMobile = window.innerWidth < 820;
 
-      const dtStep = 0.016;
-      const pos = flightCurve.getPointAt(t);
-      const nextPos = flightCurve.getPointAt(Math.min(1, t + dtStep));
-      const prevPos = flightCurve.getPointAt(Math.max(0, t - dtStep));
-
-      // Pinned 2D Earth Globe Orbit Tracking:
-      // When the user reaches the #globe section, the section is pinned/sticky.
-      // As the user scrolls through the pin distance, the aircraft completes
-      // EXACTLY TWO FULL REVOLUTIONS (4 * Math.PI) around the 2D Earth DOM element,
-      // seamlessly diving behind the Earth horizon (masked by WebGL depth occluder)
-      // and re-emerging on the front sweep!
-      let globeBlend = 0;
-      let orbitAngle = 0;
+      let pos = new THREE.Vector3();
+      let forwardHeading = new THREE.Vector3();
+      let desiredUp = new THREE.Vector3(0, 0.92, 0.39).normalize();
+      let bankRoll = 0;
       let inPin = false;
+      let behindGlobe = false;
+      let globeOrbitProgress = 0;
 
-      const globeTrack = document.getElementById("globe");
-      const earthEl = document.getElementById("earth-disc-target");
+      if (smoothScrollY < pinStart) {
+        const u = Math.min(0.9999, Math.max(0, smoothScrollY / pinStart));
+        pos = preGlobeCurve.getPointAt(u);
+        forwardHeading = preGlobeCurve.getTangentAt(u).normalize();
 
-      if (globeTrack && earthEl) {
-        const trackRect = globeTrack.getBoundingClientRect();
-        const vh = window.innerHeight;
-        const vw = window.innerWidth;
-        const pinDistance = globeTrack.offsetHeight - vh;
+        const du = 0.02;
+        const tNext = preGlobeCurve.getTangentAt(Math.min(1, u + du)).normalize();
+        const tPrev = preGlobeCurve.getTangentAt(Math.max(0, u - du)).normalize();
+        const curvature = tNext.x - tPrev.x;
+        bankRoll = THREE.MathUtils.clamp(-curvature * 4.0 - pointerX * 0.12, -0.65, 0.65);
 
-        if (trackRect.top > 0 && trackRect.top < vh * 0.75) {
-          // Approaching the globe from Services
-          const approach = 1 - trackRect.top / (vh * 0.75);
-          globeBlend = smoothstep(0, 1, approach);
-          orbitAngle = 0;
-        } else if (trackRect.top <= 0 && trackRect.top >= -pinDistance) {
-          // PINNED! Pinned on that section while executing EXACTLY two revolutions!
-          globeBlend = 1.0;
-          inPin = true;
-          const globeProgress = pinDistance > 0 ? -trackRect.top / pinDistance : 0;
-          // Two complete revolutions: progress 0..1 maps to 0..4*PI (720 degrees)
-          orbitAngle = globeProgress * Math.PI * 4;
-        } else if (trackRect.top < -pinDistance && -trackRect.top - pinDistance < vh * 0.75) {
-          // Departing the pinned section towards Story
-          const depart = (-trackRect.top - pinDistance) / (vh * 0.75);
-          globeBlend = 1 - smoothstep(0, 1, depart);
-          orbitAngle = Math.PI * 4;
-        }
+        occluder.visible = false;
+      } else if (smoothScrollY <= pinEnd) {
+        inPin = true;
+        const v = pinDistance > 0 ? (smoothScrollY - pinStart) / pinDistance : 0;
+        globeOrbitProgress = v;
+        const orbitAngle = v * Math.PI * 4; // Two complete revolutions
+        const pt = getOrbitPoint(orbitAngle);
 
-        if (globeBlend > 0.001) {
-          const earthRect = earthEl.getBoundingClientRect();
-          const earthCenterX = earthRect.left + earthRect.width * 0.5;
-          const earthCenterY = earthRect.top + earthRect.height * 0.5;
+        pos = pt.pos;
+        forwardHeading = pt.tangent;
+        // Radial normal from Earth's center: plane's belly faces globe, roof points radially outward into sky
+        desiredUp = pt.normal;
 
-          const worldH = 2 * cameraZ * Math.tan((cameraFov * Math.PI) / 360);
-          const worldW = worldH * (vw / vh);
+        // Aerodynamic bank into the sphere's curvature
+        bankRoll = -0.28;
 
-          const earthWorldX = (earthCenterX / vw - 0.5) * worldW;
-          const earthWorldY = (0.5 - earthCenterY / vh) * worldH;
-          const earthRadiusWorld = ((earthRect.width * 0.5) / vh) * worldH;
+        behindGlobe = pos.z < 0;
 
-          // Position the invisible WebGL Depth Occluder disc exactly over the 2D Earth:
-          // Any plane pixels at z < 0 behind this disc are natively discarded by GPU depth testing!
-          occluder.visible = true;
-          occluder.position.set(earthWorldX, earthWorldY, 0);
-          occluder.scale.setScalar(earthRadiusWorld * 0.985);
-
-          // 3D Orbital path around the 2D Earth:
-          const rx = earthRadiusWorld * (isMobile ? 1.25 : 1.32);
-          const ry = earthRadiusWorld * (isMobile ? 0.44 : 0.46);
-          const tiltAngle = -0.28; // -16 deg tilt to match decorative compass ring
-          const orbitZAmplitude = 2.4;
-
-          const cosA = Math.cos(orbitAngle);
-          const sinA = Math.sin(orbitAngle);
-
-          // Local elliptical coordinates (orbit starts on left limb at angle = 0):
-          const lx = -cosA * rx;
-          const ly = sinA * ry;
-
-          const cosT = Math.cos(tiltAngle);
-          const sinT = Math.sin(tiltAngle);
-
-          const orbitX = earthWorldX + (lx * cosT - ly * sinT);
-          const orbitY = earthWorldY + (lx * sinT + ly * cosT);
-          // Z depth: sinA > 0 is front arc (in front of 2D Earth), sinA < 0 is back arc (behind 2D Earth)
-          const orbitZ = sinA * orbitZAmplitude;
-
-          const orbitPos = new THREE.Vector3(orbitX, orbitY, orbitZ);
-
-          // Compute forward lookahead for smooth heading:
-          const dAngle = 0.06;
-          const nextA = orbitAngle + dAngle;
-          const nextCosA = Math.cos(nextA);
-          const nextSinA = Math.sin(nextA);
-          const nextLX = -nextCosA * rx;
-          const nextLY = nextSinA * ry;
-          const nextOrbitX = earthWorldX + (nextLX * cosT - nextLY * sinT);
-          const nextOrbitY = earthWorldY + (nextLX * sinT + nextLY * cosT);
-          const nextOrbitZ = nextSinA * orbitZAmplitude;
-          const nextOrbitPos = new THREE.Vector3(nextOrbitX, nextOrbitY, nextOrbitZ);
-
-          const prevA = orbitAngle - dAngle;
-          const prevCosA = Math.cos(prevA);
-          const prevSinA = Math.sin(prevA);
-          const prevLX = -prevCosA * rx;
-          const prevLY = prevSinA * ry;
-          const prevOrbitX = earthWorldX + (prevLX * cosT - prevLY * sinT);
-          const prevOrbitY = earthWorldY + (prevLX * sinT + prevLY * cosT);
-          const prevOrbitZ = prevSinA * orbitZAmplitude;
-          const prevOrbitPos = new THREE.Vector3(prevOrbitX, prevOrbitY, prevOrbitZ);
-
-          pos.lerp(orbitPos, globeBlend);
-          nextPos.lerp(nextOrbitPos, globeBlend);
-          prevPos.lerp(prevOrbitPos, globeBlend);
-        } else {
-          occluder.visible = false;
-        }
+        occluder.visible = true;
+        occluder.position.set(earthWorldX, earthWorldY, 0);
+        occluder.scale.setScalar(earthRadiusWorld * 0.985);
       } else {
+        const postDist = Math.max(1, maxScroll - pinEnd);
+        const w = Math.min(0.9999, Math.max(0, (smoothScrollY - pinEnd) / postDist));
+        pos = postGlobeCurve.getPointAt(w);
+        forwardHeading = postGlobeCurve.getTangentAt(w).normalize();
+
+        const dw = 0.02;
+        const tNext = postGlobeCurve.getTangentAt(Math.min(1, w + dw)).normalize();
+        const tPrev = postGlobeCurve.getTangentAt(Math.max(0, w - dw)).normalize();
+        const curvature = tNext.x - tPrev.x;
+        bankRoll = THREE.MathUtils.clamp(-curvature * 4.0 - pointerX * 0.12, -0.65, 0.65);
+
         occluder.visible = false;
       }
 
       // Smooth entrance on page load from the left side of the hero
-      const introOffsetX = (1 - introFactor) * -5.5;
-      const introOffsetY = (1 - introFactor) * 0.4;
-
-      const floatY = reducedMotion ? 0 : Math.sin(elapsed * 2.1) * 0.04;
-      const floatX = reducedMotion ? 0 : Math.cos(elapsed * 1.5) * 0.03;
+      const introOffsetX = (1 - introFactor) * -5.0;
+      const floatY = reducedMotion ? 0 : Math.sin(elapsed * 2.2) * 0.025;
+      const floatX = reducedMotion ? 0 : Math.cos(elapsed * 1.6) * 0.018;
 
       craftRig.position.set(
-        pos.x + introOffsetX + floatX + pointerX * 0.12,
-        pos.y + introOffsetY + floatY + pointerY * 0.1,
+        pos.x + introOffsetX + floatX + pointerX * 0.10,
+        pos.y + floatY + pointerY * 0.08,
         pos.z
       );
 
-      // Determine heading based on scroll direction:
-      // If scrolling down, face forward along trajectory.
-      // If scrolling up, face backward along trajectory towards the direction of scroll.
-      const headingFwd = new THREE.Vector3().copy(nextPos).sub(pos);
-      const headingBack = new THREE.Vector3().copy(prevPos).sub(pos);
-
-      if (smoothScrollDir >= 0) {
-        forwardHeading.copy(headingFwd);
-      } else {
-        forwardHeading.copy(headingBack);
-      }
-
-      forwardHeading.x += pointerX * 0.12;
-      forwardHeading.y += pointerY * 0.08;
+      // Subtle interactive cursor steer
+      forwardHeading.x += pointerX * 0.08;
+      forwardHeading.y += pointerY * 0.05;
       forwardHeading.normalize();
 
-      // Realistic aerodynamic banking roll into turns:
-      const curvature = (nextPos.x - pos.x) - (pos.x - prevPos.x);
-      let bankRoll = THREE.MathUtils.clamp(-curvature * 7.5 - pointerX * 0.15, -0.65, 0.65);
-
-      if (globeBlend > 0.1) {
-        const orbitBank = Math.cos(orbitAngle) * -0.36;
-        bankRoll = THREE.MathUtils.lerp(bankRoll, orbitBank, globeBlend);
+      const zAxis = forwardHeading.clone().normalize();
+      if (zAxis.lengthSq() < 1e-4) {
+        zAxis.set(0, 0, 1);
       }
 
-      if (forwardHeading.lengthSq() > 0.001) {
-        rightVec.crossVectors(forwardHeading, worldUp).normalize();
-        if (rightVec.lengthSq() < 0.001) {
-          rightVec.set(1, 0, 0);
+      let upRef = desiredUp.clone().normalize();
+      if (Math.abs(upRef.dot(zAxis)) > 0.95) {
+        upRef.set(0, 0, 1);
+        if (Math.abs(upRef.dot(zAxis)) > 0.95) {
+          upRef.set(0, 1, 0);
         }
-        upVec.crossVectors(rightVec, forwardHeading).normalize();
-
-        if (Math.abs(bankRoll) > 0.001) {
-          rightVec.applyAxisAngle(forwardHeading, bankRoll);
-          upVec.applyAxisAngle(forwardHeading, bankRoll);
-        }
-
-        rotMatrix.makeBasis(rightVec, upVec, forwardHeading);
-        targetQuat.setFromRotationMatrix(rotMatrix);
-        craftRig.quaternion.slerp(targetQuat, reducedMotion ? 0.25 : 0.09);
       }
 
-      const targetScale = sampleScale(isMobile, pos.z);
-      craftRig.scale.setScalar(targetScale);
+      // Right-handed basis with det = +1:
+      // xAxis (Right wing) = upRef x zAxis
+      // yAxis (Up / Dorsal) = zAxis x xAxis
+      // zAxis (Nose / Forward) = forwardHeading
+      const xAxis = new THREE.Vector3().crossVectors(upRef, zAxis).normalize();
+      const yAxis = new THREE.Vector3().crossVectors(zAxis, xAxis).normalize();
+
+      // Apply aerodynamic banking roll around zAxis
+      if (Math.abs(bankRoll) > 0.001) {
+        xAxis.applyAxisAngle(zAxis, bankRoll);
+        yAxis.applyAxisAngle(zAxis, bankRoll);
+      }
+
+      rotMatrix.makeBasis(xAxis, yAxis, zAxis);
+      targetQuat.setFromRotationMatrix(rotMatrix);
+      craftRig.quaternion.slerp(targetQuat, reducedMotion ? 0.35 : 0.11);
+
+      const targetScale = sampleScale(isMobile, pos.z) * planeFactor;
+      craftRig.scale.setScalar(Math.max(0.0001, targetScale));
+
+      // Overall page scroll progress 0..1
+      const t = Math.min(1, Math.max(0, smoothScrollY / maxScroll));
 
       // 3-Stage Morph Weights
       const m1 = smoothstep(0.2, 0.3, t);
@@ -997,21 +1021,16 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
 
       renderer.render(scene, camera);
 
-      const behindGlobe = pos.z < 0;
       const stageIndex: 0 | 1 | 2 = t < 0.28 ? 0 : t < 0.65 ? 1 : 2;
 
       const now = performance.now();
-      if (
-        poseCallbackRef.current &&
-        now - lastPoseEmit > 250
-      ) {
-        lastBehindGlobe = behindGlobe;
+      if (poseCallbackRef.current && now - lastPoseEmit > 250) {
         lastPoseEmit = now;
         poseCallbackRef.current({
           progress: t,
           stageIndex,
           behindGlobe,
-          globeOrbitProgress: inPin ? orbitAngle / (Math.PI * 4) : 0,
+          globeOrbitProgress: inPin ? globeOrbitProgress : 0,
         });
       }
     };
@@ -1023,6 +1042,8 @@ export default function FlightStage({ enabled, onPoseChange }: FlightStageProps)
       window.removeEventListener("scroll", updateScrollTarget);
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("resize", onResize);
+      window.removeEventListener("load", measureLayout);
+      ro?.disconnect();
       if (renderer.domElement.parentNode === container) {
         container.removeChild(renderer.domElement);
       }
